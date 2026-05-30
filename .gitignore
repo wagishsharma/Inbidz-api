@@ -1,0 +1,12 @@
+node_modules/
+.uploads/
+.expo/
+dist/
+.next/
+.env
+.env.local
+*.log
+.DS_Store
+.turbo/
+apps/mobile/.expo/
+apps/api/.next/

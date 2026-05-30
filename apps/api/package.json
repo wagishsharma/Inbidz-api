@@ -1,0 +1,31 @@
+{
+  "name": "@inbidz/api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001 -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "migrate": "node scripts/migrate.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/s3-request-presigner": "^3.700.0",
+    "@inbidz/shared": "*",
+    "jose": "^5.9.6",
+    "mysql2": "^3.11.5",
+    "next": "^14.2.18",
+    "razorpay": "^2.9.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sharp": "^0.33.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "dotenv": "^16.4.5",
+    "typescript": "^5.6.3"
+  }
+}

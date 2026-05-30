@@ -1,0 +1,29 @@
+{
+  "name": "inbidz-app",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@inbidz/api & npm run dev --workspace=@inbidz/mobile",
+    "dev:api": "npm run dev --workspace=@inbidz/api",
+    "dev:mobile": "npm run dev --workspace=@inbidz/mobile",
+    "build": "npm run build --workspace=@inbidz/shared && npm run build --workspace=@inbidz/api",
+    "migrate": "npm run migrate --workspace=@inbidz/api",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "expo-font": "14.0.12",
+    "@expo/vector-icons": {
+      "expo-font": "14.0.12"
+    }
+  }
+}
