@@ -1,12 +1,28 @@
 const path = require('path');
+const fs = require('fs');
+
+const apiDir = path.resolve(__dirname);
+const repoRoot = path.resolve(apiDir, '../..');
+
+/** Monorepo hoists `next` to repo root — not apps/api/node_modules. */
+function resolveNextBin() {
+  const candidates = [
+    path.join(repoRoot, 'node_modules/next/dist/bin/next'),
+    path.join(apiDir, 'node_modules/next/dist/bin/next'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[0];
+}
 
 module.exports = {
   apps: [
     {
       name: 'inbidz-api',
-      script: 'node_modules/next/dist/bin/next',
+      script: resolveNextBin(),
       args: 'start -p 3003',
-      cwd: path.resolve(__dirname),
+      cwd: apiDir,
       instances: 1,
       exec_mode: 'fork',
       env: {

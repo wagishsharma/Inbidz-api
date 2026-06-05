@@ -151,6 +151,13 @@ if [ "${RUN_MIGRATE:-0}" = "1" ]; then
   }
 fi
 
+NEXT_BIN="$REPO_ROOT/node_modules/next/dist/bin/next"
+if [ ! -f "$NEXT_BIN" ] && [ ! -f "$API_DIR/node_modules/next/dist/bin/next" ]; then
+  echo "❌ next binary not found (expected at $NEXT_BIN)."
+  echo "   Run npm install from repo root and retry."
+  exit 1
+fi
+
 echo "🔁 Reloading PM2 process (zero downtime)..."
 if pm2 describe "$PM2_APP_NAME" >/dev/null 2>&1; then
   pm2 reload ecosystem.config.js --env production || {
