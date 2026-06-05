@@ -18,7 +18,10 @@ export default function ShortLinkScreen() {
     if (!code) return;
     api
       .resolveShortCode(code)
-      .then((res) => setPost(res.post))
+      .then((res) => {
+        setPost(res.post);
+        router.replace(`/post/view/${res.post.id}`);
+      })
       .catch(() => setPost(null))
       .finally(() => setLoading(false));
   }, [code]);

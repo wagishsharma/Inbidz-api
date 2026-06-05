@@ -32,6 +32,8 @@ type MediaRow = {
   media_type: 'photo' | 'video';
   r2_key: string;
   public_url: string | null;
+  thumbnail_r2_key?: string | null;
+  thumbnail_url?: string | null;
   hls_url: string | null;
   width: number;
   height: number;
@@ -99,10 +101,19 @@ export function mapProfile(row: ProfileRow, followerCount = 0, followingCount = 
 
 export function mapMedia(row: MediaRow): PostMedia {
   const url = resolveMediaUrl(row.public_url, row.r2_key);
+  const thumbKey = row.thumbnail_r2_key?.trim();
+  const thumbnailUrl =
+    row.media_type === 'video' && (thumbKey || row.thumbnail_url) ?
+      thumbKey ?
+        resolveMediaUrl(row.thumbnail_url, thumbKey)
+      : (row.thumbnail_url?.trim() ?? undefined)
+    : undefined;
+
   return {
     id: row.id,
     type: row.media_type,
     url,
+    thumbnailUrl: row.media_type === 'video' ? thumbnailUrl : undefined,
     hlsUrl: row.hls_url ?? undefined,
     width: row.width,
     height: row.height,

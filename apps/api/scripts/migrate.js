@@ -15,10 +15,17 @@ async function main() {
     multipleStatements: true,
   });
 
-  const sqlPath = path.join(__dirname, '../migrations/001_initial_schema.sql');
-  const sql = fs.readFileSync(sqlPath, 'utf8');
-  await connection.query(sql);
-  console.log('Migration complete: 001_initial_schema.sql');
+  const migrationsDir = path.join(__dirname, '../migrations');
+  const files = fs
+    .readdirSync(migrationsDir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+    await connection.query(sql);
+    console.log(`Migration complete: ${file}`);
+  }
   await connection.end();
 }
 

@@ -18,8 +18,18 @@ export async function GET(request: NextRequest) {
     searchParams.get('offset') ?? undefined
   );
 
-  const { fetchFeedPosts } = await import('@/lib/post-service');
-  const posts = await fetchFeedPosts(viewer, limit, offset);
+  const feed = searchParams.get('feed') ?? 'for_you';
+  const { fetchDiscoverFeedPosts, fetchFollowingFeedPosts } = await import('@/lib/post-service');
+
+  if (feed === 'following') {
+    if (!viewer) {
+      return NextResponse.json({ error: 'Sign in to view following feed' }, { status: 401 });
+    }
+    const posts = await fetchFollowingFeedPosts(viewer, limit, offset);
+    return NextResponse.json({ posts });
+  }
+
+  const posts = await fetchDiscoverFeedPosts(viewer, limit, offset);
   return NextResponse.json({ posts });
 }
 

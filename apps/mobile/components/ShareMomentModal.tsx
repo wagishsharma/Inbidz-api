@@ -1,5 +1,7 @@
-import { Modal, Pressable, Share, StyleSheet, Text, View, Linking, Platform } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View, Linking, Platform } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { colors, fonts, fs, radii, shared, sp } from '@/constants/theme';
+import { shareText } from '@/lib/share-post';
 
 type Props = {
   visible: boolean;
@@ -33,15 +35,15 @@ export function ShareMomentModal({
   };
 
   const shareNative = async () => {
-    await Share.share({ message: whatsappMessage, url: shortUrl });
+    await shareText(whatsappMessage);
     trackShare('native');
   };
 
   const copyLink = async () => {
-    if (Platform.OS === 'web' && navigator.clipboard) {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
       await navigator.clipboard.writeText(shortUrl);
     } else {
-      await Share.share({ message: shortUrl });
+      await Clipboard.setStringAsync(shortUrl);
     }
     trackShare('copy');
   };

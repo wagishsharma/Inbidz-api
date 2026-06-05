@@ -43,8 +43,18 @@ export function sp(size: number): number {
 }
 
 export const layout = {
+  /** Narrow mobile-style web (phone browser) */
   maxWidth: Platform.OS === 'web' ? 480 : undefined,
   maxWidthWide: Platform.OS === 'web' ? 720 : undefined,
+  /** Desktop web: Instagram-style feed column */
+  feedMaxWidth: 630,
+  webBreakpoint: 960,
+  webWideBreakpoint: 1280,
+  webSideNavWidth: 244,
+  webAsideWidth: 300,
+  webGutter: 24,
+  immersiveStageMaxWidth: 400,
+  immersiveStageMaxHeight: 720,
   contentPadding: sp(16),
   sectionGap: sp(20),
   cardPadding: sp(16),

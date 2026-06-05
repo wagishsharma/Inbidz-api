@@ -18,6 +18,20 @@ export function formatINR(amount: number): string {
   }).format(amount);
 }
 
+/** Minimum next bid amount in INR for an auction listing. */
+export function getMinimumBidAmount(commerce: {
+  currentBid?: number;
+  minBidIncrement?: number;
+  price?: number;
+}): number {
+  const increment = commerce.minBidIncrement ?? 100;
+  if (commerce.currentBid != null && commerce.currentBid > 0) {
+    return commerce.currentBid + increment;
+  }
+  const startingPrice = commerce.price ?? 0;
+  return Math.max(startingPrice, increment);
+}
+
 export function getPostWhatsAppMessage(
   momentType: ShareMomentType,
   postTitle: string,
@@ -28,7 +42,7 @@ export function getPostWhatsAppMessage(
 
   switch (momentType) {
     case 'post_live':
-      return `🎨 My post "${postTitle}" just went LIVE on InBidz!\n\nShop here → ${shortUrl}`;
+      return `🎨 My post "${postTitle}" just went LIVE on INBIDZ!\n\nShop here → ${shortUrl}`;
     case 'first_bid':
       return `🎉 First offer on "${postTitle}"! Someone wants it.\n\nOffer now → ${shortUrl}`;
     case 'highest_bid':
@@ -36,12 +50,12 @@ export function getPostWhatsAppMessage(
     case 'ending_soon':
       return `⏳ 10 minutes left! "${postTitle}" auction ends soon.\n\nLast chance → ${shortUrl}`;
     case 'first_sale':
-      return `✨ Just sold "${postTitle}" on InBidz!\n\nSee my shop → ${shortUrl}`;
+      return `✨ Just sold "${postTitle}" on INBIDZ!\n\nSee my shop → ${shortUrl}`;
     case 'buyer_purchase':
-      return `🛍️ I just got "${postTitle}" on InBidz!\n\nCheck it out → ${shortUrl}`;
+      return `🛍️ I just got "${postTitle}" on INBIDZ!\n\nCheck it out → ${shortUrl}`;
     case 'first_like':
     default:
-      return `Check out "${postTitle}" on InBidz → ${shortUrl}`;
+      return `Check out "${postTitle}" on INBIDZ → ${shortUrl}`;
   }
 }
 

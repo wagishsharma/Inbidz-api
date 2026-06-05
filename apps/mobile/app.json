@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "InBidz",
+    "name": "INBIDZ",
     "slug": "inbidz-app",
     "version": "1.0.0",
     "orientation": "default",
@@ -14,14 +14,14 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#4630EB",
-        "foregroundImage": "./assets/icon.png"
+        "foregroundImage": "./assets/adaptive-icon.png"
       },
       "package": "com.inbidz.app"
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/icon.png"
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -32,8 +32,8 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "http://192.168.1.4:3001",
-      "authLoginUrl": "http://192.168.1.4:3002/login"
+      "apiUrl": "https://api.inbidz.com",
+      "authLoginUrl": "https://id.inbidz.com/login"
     }
   }
 }

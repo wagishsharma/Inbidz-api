@@ -1,4 +1,4 @@
--- InBidz Social Commerce App schema
+-- INBIDZ Social Commerce App schema
 -- Run via: npm run migrate --workspace=@inbidz/api
 
 CREATE TABLE IF NOT EXISTS app_profiles (

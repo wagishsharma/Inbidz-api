@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   const width = isStory ? 1080 : 1080;
   const height = isStory ? 1920 : 1080;
 
-  const title = (post.caption || 'InBidz Post').slice(0, 60);
+  const title = (post.caption || 'INBIDZ Post').slice(0, 60);
   const artist = post.author.displayName;
   const priceText =
     post.commerce?.currentBid != null
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
           ? 'New Highest Offer'
           : template === 'ending_soon'
             ? 'Ending Soon'
-            : 'LIVE on InBidz';
+            : 'LIVE on INBIDZ';
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">

@@ -3,8 +3,17 @@ import { layout } from '@/constants/theme';
 
 export function getContentWidth(): number {
   const { width } = Dimensions.get('window');
-  if (Platform.OS === 'web' && layout.maxWidth) {
-    return Math.min(width, layout.maxWidth);
+  if (Platform.OS === 'web') {
+    if (width >= layout.webBreakpoint) {
+      const aside = width >= layout.webWideBreakpoint ? layout.webAsideWidth : 0;
+      return Math.min(
+        layout.feedMaxWidth,
+        Math.max(320, width - layout.webSideNavWidth - aside - layout.webGutter * 2)
+      );
+    }
+    if (layout.maxWidth) {
+      return Math.min(width, layout.maxWidth);
+    }
   }
   return width;
 }

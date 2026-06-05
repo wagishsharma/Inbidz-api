@@ -1,4 +1,4 @@
-# InBidz Social Commerce App
+# INBIDZ Social Commerce App
 
 Post it. Share it. Sell it. — A cross-platform (iOS, Android, Web) social commerce app built as a monorepo.
 
@@ -17,7 +17,7 @@ inbidz-app/
 
 - **Feed-first social** — photo/video posts (portrait & landscape)
 - **Seller-controlled commerce** — Buy Now, auctions, DM offers per post
-- **Hybrid InBidz stack** — central auth (login.inbidz.com JWT), Razorpay, R2 storage
+- **Hybrid INBIDZ stack** — central auth (login.inbidz.com JWT), Razorpay, R2 storage
 - **Viral sharing** — share moments, short URLs, OG/share images, referral attribution
 - **Dual-sided onboarding** — browse without signup; progressive shop setup
 
@@ -85,3 +85,10 @@ See [apps/api/.env.example](apps/api/.env.example) and [apps/mobile/app.json](ap
 | `npm run dev:mobile` | Start Expo (web + native) |
 | `npm run migrate` | Apply MySQL schema |
 | `npm run typecheck` | Typecheck all workspaces |
+
+## Docs
+
+- [Deploy API (`api.inbidz.com`)](./docs/deploy-api.md) — PM2 on :3003, nginx, migrations, production env
+- [Deploy web app (`app.inbidz.com`)](./docs/deploy-web-app.md) — static Expo web export, DNS, API/login/CORS
+- [Staging, share links & deep linking](./docs/staging-and-app-links.md) — staging domains, `APPLE_TEAM_ID`, Android fingerprint, D-U-N-S timeline
+- [Video playback & optimization](./docs/video-playback-and-optimization.md) — R2 delivery, lazy loading, compression roadmap

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -8,29 +8,41 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
-import type { Post } from '@inbidz/shared';
+import type { FeedMode, Post } from '@inbidz/shared';
 import { PostCard } from '@/components/PostCard';
 import { GroupedSection } from '@/components/GroupedSection';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { colors, fonts, fs, layout, shared, sp } from '@/constants/theme';
-import { getContentWidth } from '@/lib/dimensions';
-
-const CARD_WIDTH = getContentWidth() - layout.contentPadding * 2;
+import { useScrollBottomPadding } from '@/lib/tab-bar-insets';
+import { useWebLayout } from '@/lib/use-web-layout';
+import { subscribeFollowGraphChanged } from '@/lib/follow-invalidation';
 
 export default function FeedScreen() {
+  const { feedColumnWidth, isDesktop, isWeb } = useWebLayout();
+  const isMobileWeb = isWeb && !isDesktop;
+  const scrollBottomPad = useScrollBottomPadding();
+  const cardWidth = feedColumnWidth - layout.contentPadding * 2;
   const isFocused = useIsFocused();
   const { accessToken, login, user } = useAuth();
+  const [feedMode, setFeedMode] = useState<FeedMode>('for_you');
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sellBanner, setSellBanner] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
+    if (feedMode === 'following' && !accessToken) {
+      setPosts([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    if (!silent) setLoading(true);
     try {
-      const res = await api.getFeed(accessToken);
+      const res = await api.getFeed(accessToken, 20, 0, feedMode);
       setPosts(res.posts);
       if (accessToken) {
         const onboarding = await api.getOnboarding(accessToken);
@@ -38,14 +50,34 @@ export default function FeedScreen() {
       }
     } catch (e) {
       console.warn('Feed load failed', e);
+      if (feedMode === 'following') setPosts([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [accessToken]);
+  }, [accessToken, feedMode]);
+
+  const skipFocusReload = useRef(true);
 
   useEffect(() => {
-    load();
+    setLoading(true);
+    void load(false);
+  }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (skipFocusReload.current) {
+        skipFocusReload.current = false;
+        return;
+      }
+      void load(true);
+    }, [load])
+  );
+
+  useEffect(() => {
+    return subscribeFollowGraphChanged(() => {
+      void load(true);
+    });
   }, [load]);
 
   const handleLike = async (postId: string) => {
@@ -62,6 +94,9 @@ export default function FeedScreen() {
       )
     );
   };
+
+  const showFollowingSignIn = feedMode === 'following' && !accessToken;
+  const showFollowingEmpty = feedMode === 'following' && accessToken && posts.length === 0;
 
   if (loading) {
     return (
@@ -87,15 +122,53 @@ export default function FeedScreen() {
           tintColor={colors.accent}
         />
       }
-      contentContainerStyle={posts.length === 0 ? styles.emptyList : styles.list}
+      contentContainerStyle={[
+        posts.length === 0 && !showFollowingSignIn ? styles.emptyList : styles.list,
+        { paddingBottom: scrollBottomPad },
+      ]}
       ListHeaderComponent={
         <>
-          {!user && (
-            <GroupedSection title="Welcome">
+          <View
+            style={[
+              styles.feedTabs,
+              isDesktop && styles.feedTabsDesktop,
+              isMobileWeb && styles.feedTabsMobileWeb,
+            ]}
+          >
+            <Pressable
+              style={[styles.feedTab, feedMode === 'for_you' && styles.feedTabActive]}
+              onPress={() => setFeedMode('for_you')}
+            >
+              <Text
+                style={[
+                  styles.feedTabText,
+                  feedMode === 'for_you' && styles.feedTabTextActive,
+                ]}
+              >
+                For you
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.feedTab, feedMode === 'following' && styles.feedTabActive]}
+              onPress={() => setFeedMode('following')}
+            >
+              <Text
+                style={[
+                  styles.feedTabText,
+                  feedMode === 'following' && styles.feedTabTextActive,
+                ]}
+              >
+                Following
+              </Text>
+            </Pressable>
+          </View>
+
+          {!user && feedMode === 'for_you' && (
+            <GroupedSection title="Welcome" style={isMobileWeb ? styles.groupedTight : undefined}>
               <View style={styles.welcomeInner}>
                 <Text style={styles.welcomeTitle}>Post it. Share it. Sell it.</Text>
                 <Text style={styles.welcomeSub}>
-                  Sign in to buy, sell, and follow creators on InBidz.
+                  Sign in to buy, sell, and follow creators on INBIDZ.
                 </Text>
                 <Pressable style={styles.loginBtn} onPress={login}>
                   <Text style={styles.loginText}>Sign in</Text>
@@ -104,7 +177,33 @@ export default function FeedScreen() {
             </GroupedSection>
           )}
 
-          {sellBanner && (
+          {showFollowingSignIn && (
+            <GroupedSection title="Following">
+              <View style={styles.welcomeInner}>
+                <Text style={styles.welcomeSub}>
+                  Sign in to see posts from sellers you follow.
+                </Text>
+                <Pressable style={styles.loginBtn} onPress={login}>
+                  <Text style={styles.loginText}>Sign in</Text>
+                </Pressable>
+              </View>
+            </GroupedSection>
+          )}
+
+          {showFollowingEmpty && (
+            <GroupedSection title="Following">
+              <View style={styles.welcomeInner}>
+                <Text style={styles.welcomeSub}>
+                  Follow sellers from their profiles to fill this feed.
+                </Text>
+                <Pressable style={styles.loginBtn} onPress={() => router.push('/(tabs)/explore')}>
+                  <Text style={styles.loginText}>Browse shop</Text>
+                </Pressable>
+              </View>
+            </GroupedSection>
+          )}
+
+          {sellBanner && feedMode === 'for_you' && (
             <GroupedSection title="For sellers">
               <Pressable style={styles.bannerRow} onPress={() => router.push('/shop/setup')}>
                 <View style={styles.bannerIcon}>
@@ -120,27 +219,35 @@ export default function FeedScreen() {
           )}
 
           {posts.length > 0 && (
-            <Text style={styles.sectionLabel}>Feed</Text>
+            <Text
+              style={[styles.sectionLabel, isMobileWeb && styles.sectionLabelMobileWeb]}
+            >
+              {feedMode === 'following' ? 'From people you follow' : 'Feed'}
+            </Text>
           )}
         </>
       }
       ListEmptyComponent={
-        <GroupedSection title="Feed">
-          <View style={styles.emptyInner}>
-            <Text style={styles.emptyText}>No posts yet.</Text>
-            <Pressable style={styles.createBtn} onPress={() => router.push('/(tabs)/create')}>
-              <Text style={styles.createBtnText}>Create first post</Text>
-            </Pressable>
-          </View>
-        </GroupedSection>
+        feedMode === 'for_you' ? (
+          <GroupedSection title="Feed">
+            <View style={styles.emptyInner}>
+              <Text style={styles.emptyText}>No posts yet.</Text>
+              <Pressable style={styles.createBtn} onPress={() => router.push('/(tabs)/create')}>
+                <Text style={styles.createBtnText}>Create first post</Text>
+              </Pressable>
+            </View>
+          </GroupedSection>
+        ) : null
       }
       renderItem={({ item, index }) => (
         <View style={styles.cardWrap}>
           <PostCard
             post={item}
-            width={CARD_WIDTH}
+            width={cardWidth}
             autoPlay={isFocused && index === 0}
+            immersiveFeed={{ posts, index, feedMode }}
             onLike={() => handleLike(item.id)}
+            onComment={() => router.push(`/post/${item.id}`)}
             onShare={() => {
               if (accessToken && item.commerceMode !== 'none') {
                 api.trackOnboarding(accessToken, 'commerce_post_viewed', { postId: item.id });
@@ -155,8 +262,45 @@ export default function FeedScreen() {
 
 const styles = StyleSheet.create({
   container: shared.screen,
-  list: {
-    paddingBottom: sp(24),
+  list: {},
+  feedTabs: {
+    flexDirection: 'row',
+    marginHorizontal: layout.contentPadding,
+    marginTop: sp(8),
+    marginBottom: sp(12),
+    gap: sp(8),
+  },
+  feedTabsMobileWeb: {
+    marginTop: sp(4),
+    marginBottom: sp(6),
+  },
+  feedTabsDesktop: {
+    marginTop: sp(20),
+  },
+  groupedTight: {
+    marginBottom: sp(10),
+  },
+  feedTab: {
+    paddingHorizontal: sp(16),
+    paddingVertical: sp(8),
+    borderRadius: 20,
+    backgroundColor: colors.bgMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  feedTabActive: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
+  },
+  feedTabText: {
+    fontFamily: fonts.sans,
+    fontSize: fs(14),
+    fontWeight: '500',
+    color: colors.textMuted,
+  },
+  feedTabTextActive: {
+    color: colors.accent,
+    fontWeight: '600',
   },
   sectionLabel: {
     fontFamily: fonts.sans,
@@ -168,6 +312,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.contentPadding,
     marginBottom: sp(8),
     marginTop: sp(4),
+  },
+  sectionLabelMobileWeb: {
+    marginTop: 0,
+    marginBottom: sp(6),
   },
   cardWrap: {
     paddingHorizontal: layout.contentPadding,

@@ -125,7 +125,7 @@ export default function ShopSetupScreen() {
             <Text style={styles.reviewLabel}>Review</Text>
             <Text style={styles.summary}>{shopName}</Text>
             <Text style={styles.hint}>
-              Payout KYC connects to your InBidz account when you go live.
+              Payout KYC connects to your INBIDZ account when you go live.
             </Text>
             <Pressable style={styles.btn} onPress={finish} disabled={submitting}>
               {submitting ? (

@@ -6,10 +6,25 @@ export type AccessTokenPayload = {
   email?: string;
   name?: string;
   role?: string;
+  /** Set by login.inbidz.com when the user has a profile photo */
+  profile_photo_url?: string;
   iat: number;
   exp: number;
   [key: string]: unknown;
 };
+
+export function getAvatarUrlFromPayload(payload: AccessTokenPayload): string | null {
+  const candidates = [
+    payload.profile_photo_url,
+    payload.avatar_url,
+    payload.picture,
+    payload.avatarUrl,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
 
 function getSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
@@ -34,11 +49,14 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenPaylo
     const secret = getSecret();
     const result = await jose.jwtVerify(trimmed, secret);
     const p = result.payload;
+    const profile_photo_url =
+      typeof p.profile_photo_url === 'string' ? p.profile_photo_url : undefined;
     return {
       sub: p.sub as string,
       email: (p.email as string) ?? undefined,
       name: (p.name as string) ?? undefined,
       role: (p.role as string) ?? undefined,
+      profile_photo_url,
       iat: (p.iat as number) ?? 0,
       exp: (p.exp as number) ?? 0,
       ...p,

@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'InBidz — Post it. Share it. Sell it.',
+  title: 'INBIDZ — Post it. Share it. Sell it.',
   description: 'Social commerce for creators',
 };
 

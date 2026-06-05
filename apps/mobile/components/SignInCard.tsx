@@ -12,8 +12,8 @@ type Props = {
 };
 
 export function SignInCard({
-  title = 'Sign in to InBidz',
-  subtitle = 'Use your InBidz account to buy, sell, and follow creators.',
+  title = 'Sign in to INBIDZ',
+  subtitle = 'Use your INBIDZ account to buy, sell, and follow creators.',
   onSignIn,
   footerText = "Don't have an account?",
   footerAction = 'Create account',

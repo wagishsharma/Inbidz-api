@@ -22,6 +22,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'file required' }, { status: 400 });
   }
 
+  if (file.size === 0) {
+    return NextResponse.json({ error: 'Empty file — upload failed on device' }, { status: 400 });
+  }
+
   const filename = (form.get('filename') as string) || 'upload.jpg';
   const ext = path.extname(filename) || '.jpg';
   const safeExt = ext.replace(/[^a-z0-9.]/gi, '').slice(0, 8);

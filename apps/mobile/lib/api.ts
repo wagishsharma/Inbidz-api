@@ -1,5 +1,6 @@
 import { API_URL } from './config';
-import type { Post, ShareMomentType } from '@inbidz/shared';
+import type { FeedMode, Post, PostComment, ShareMomentType, UserProfile } from '@inbidz/shared';
+import { uploadDevFile, uploadR2File } from './upload-media';
 
 type RequestOptions = {
   method?: string;
@@ -63,8 +64,25 @@ export const api = {
       { method: 'POST', body: { refreshToken } }
     ),
 
-  getFeed: (token?: string | null, limit = 20, offset = 0) =>
-    request<{ posts: Post[] }>(`/api/posts?limit=${limit}&offset=${offset}`, { token }),
+  getFeed: (
+    token?: string | null,
+    limit = 20,
+    offset = 0,
+    feed: FeedMode = 'for_you'
+  ) =>
+    request<{ posts: Post[] }>(
+      `/api/posts?limit=${limit}&offset=${offset}&feed=${feed}`,
+      { token }
+    ),
+
+  getUser: (userId: string, token?: string | null) =>
+    request<{ user: UserProfile & { postCount: number } }>(`/api/users/${userId}`, { token }),
+
+  getUserPosts: (userId: string, token?: string | null, limit = 30, offset = 0) =>
+    request<{ posts: Post[] }>(
+      `/api/users/${userId}/posts?limit=${limit}&offset=${offset}`,
+      { token }
+    ),
 
   getPost: (id: string, token?: string | null) =>
     request<{ post: Post }>(`/api/posts/${id}`, { token }),
@@ -77,6 +95,24 @@ export const api = {
 
   likePost: (token: string, id: string) =>
     request<{ liked: boolean }>(`/api/posts/${id}/like`, { method: 'POST', token }),
+
+  getComments: (postId: string, limit = 50, offset = 0) =>
+    request<{ comments: PostComment[] }>(
+      `/api/posts/${postId}/comments?limit=${limit}&offset=${offset}`
+    ),
+
+  createComment: (token: string, postId: string, body: string) =>
+    request<{ comment: PostComment }>(`/api/posts/${postId}/comments`, {
+      method: 'POST',
+      body: { body },
+      token,
+    }),
+
+  deleteComment: (token: string, postId: string, commentId: string) =>
+    request<{ success: boolean }>(
+      `/api/posts/${postId}/comments?commentId=${encodeURIComponent(commentId)}`,
+      { method: 'DELETE', token }
+    ),
 
   placeBid: (token: string, id: string, amount: number) =>
     request<{ success: boolean; post: Post }>(`/api/posts/${id}/bid`, {
@@ -142,53 +178,12 @@ export const api = {
       r2Error?: string;
     }>('/api/upload/presign', { method: 'POST', body: { filename, contentType }, token }),
 
-  uploadR2: async (token: string, uri: string, filename: string, contentType: string) => {
-    const blob = await fetch(uri).then((r) => r.blob());
-    const form = new FormData();
-    form.append('file', blob, filename);
-    form.append('filename', filename);
-    form.append('contentType', contentType);
+  uploadR2: (token: string, uri: string, filename: string, contentType: string) =>
+    uploadR2File(token, uri, filename, contentType),
 
-    const headers: Record<string, string> = {};
-    if (token && token.split('.').length === 3) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    const res = await fetch(`${API_URL}/api/upload/r2`, {
-      method: 'POST',
-      headers,
-      body: form,
-      credentials: typeof window !== 'undefined' ? 'include' : 'omit',
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data.error || 'R2 upload failed');
-    }
-    return data as { key: string; publicUrl: string };
-  },
-
-  uploadDev: async (token: string, uri: string, filename: string) => {
-    const blob = await fetch(uri).then((r) => r.blob());
-    const form = new FormData();
-    form.append('file', blob, filename);
-    form.append('filename', filename);
-
-    const headers: Record<string, string> = {};
-    if (token && token.split('.').length === 3) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    const res = await fetch(`${API_URL}/api/upload/dev`, {
-      method: 'POST',
-      headers,
-      body: form,
-      credentials: typeof window !== 'undefined' ? 'include' : 'omit',
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data.error || 'Upload failed');
-    }
-    return data as { key: string; publicUrl: string };
+  uploadDev: (token: string, uri: string, filename: string) => {
+    const contentType = filename.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';
+    return uploadDevFile(token, uri, filename, contentType);
   },
 
   createShareMoment: (
@@ -230,4 +225,39 @@ export const api = {
       body: { eventType, metadata },
       token,
     }),
+
+  getGrowthCoach: (token?: string | null) =>
+    request<{
+      success: boolean;
+      primaryAction: {
+        title: string;
+        why: string;
+        ctaPath: string;
+        ctaKind: string;
+        actionKey: string;
+        completionMode: string;
+      };
+      hasUpdates: boolean;
+    }>('/api/creator-manager/coach', { token }),
+
+  getGrowthBrief: (token?: string | null, refresh = false) =>
+    request<{ success: boolean; brief: Record<string, unknown> }>(
+      refresh ? '/api/creator-manager/brief?refresh=1' : '/api/creator-manager/brief',
+      { method: refresh ? 'POST' : 'GET', token }
+    ),
+
+  completeGrowthAction: (token: string, actionKey: string) =>
+    request<{ success: boolean; primaryAction?: Record<string, unknown> }>(
+      '/api/creator-manager/actions/complete',
+      { method: 'POST', body: { actionKey }, token }
+    ),
+
+  saveGrowthPreferences: (
+    token: string,
+    body: { creatorGoals?: string[]; instagramUsername?: string; dismissedIntentPrompt?: boolean }
+  ) =>
+    request<{ success: boolean; brief?: Record<string, unknown> }>(
+      '/api/creator-manager/preferences',
+      { method: 'PATCH', body, token }
+    ),
 };

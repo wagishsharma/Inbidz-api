@@ -5,9 +5,18 @@
   "scripts": {
     "dev": "next dev -p 3001 -H 0.0.0.0",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "next start -p 3003",
     "migrate": "node scripts/migrate.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop ecosystem.config.js",
+    "pm2:restart": "pm2 restart ecosystem.config.js --env production",
+    "pm2:reload": "pm2 reload ecosystem.config.js --env production",
+    "pm2:delete": "pm2 delete ecosystem.config.js",
+    "pm2:logs": "pm2 logs inbidz-api",
+    "pm2:monit": "pm2 monit",
+    "pm2:status": "pm2 status",
+    "deploy": "./deploy.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",

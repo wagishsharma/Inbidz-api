@@ -37,6 +37,8 @@ type AuthUser = {
   avatarUrl?: string;
   shopSetupComplete?: boolean;
   referralCode?: string;
+  followerCount?: number;
+  followingCount?: number;
 };
 
 type AuthContextValue = {
@@ -45,7 +47,7 @@ type AuthContextValue = {
   loading: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: (token?: string | null) => Promise<string | null>;
   handleAuthCallback: (code: string) => Promise<void>;
 };
 
@@ -79,14 +81,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshUser = useCallback(async (token?: string | null) => {
+  const refreshUser = useCallback(async (token?: string | null): Promise<string | null> => {
     const t = token ?? accessToken;
 
     try {
       const res = await api.me(t ?? undefined);
       if (res.authenticated && res.user) {
         setUser(res.user as AuthUser);
-        return;
+        return t ?? (await getStored(ACCESS_KEY));
       }
     } catch {
       // fall through to refresh / logout
@@ -103,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const res = await api.me(tokens.accessToken);
         if (res.authenticated && res.user) {
           setUser(res.user as AuthUser);
-          return;
+          return tokens.accessToken;
         }
       } catch {
         // refresh failed
@@ -114,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await deleteStored(REFRESH_KEY);
     setAccessToken(null);
     setUser(null);
+    return null;
   }, [accessToken]);
 
   const handleAuthCallback = useCallback(async (code: string) => {

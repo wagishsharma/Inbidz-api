@@ -4,7 +4,8 @@ import type { ShareMomentType } from '@inbidz/shared';
 import { executeQuery } from './database';
 
 export function getShortUrlBase(): string {
-  return (process.env.SHORT_URL_BASE || process.env.APP_PUBLIC_URL || 'http://localhost:8081/p').replace(/\/$/, '');
+  const apiBase = (process.env.API_PUBLIC_URL || 'http://localhost:3001').replace(/\/$/, '');
+  return (process.env.SHORT_URL_BASE || `${apiBase}/p`).replace(/\/$/, '');
 }
 
 export async function getOrCreateShortUrl(
@@ -40,15 +41,22 @@ export async function getOrCreateShortUrl(
 }
 
 export async function resolveShortCode(shortCode: string): Promise<string | null> {
+  const postId = await peekShortCode(shortCode);
+  if (!postId) return null;
+  await executeQuery(
+    'UPDATE post_short_urls SET click_count = click_count + 1, last_clicked_at = NOW() WHERE short_code = ?',
+    [shortCode]
+  );
+  return postId;
+}
+
+/** Resolve short code without incrementing click stats (OG crawlers, metadata). */
+export async function peekShortCode(shortCode: string): Promise<string | null> {
   const rows = await executeQuery<{ post_id: string }[]>(
     'SELECT post_id FROM post_short_urls WHERE short_code = ? LIMIT 1',
     [shortCode]
   );
   if (rows.length === 0) return null;
-  await executeQuery(
-    'UPDATE post_short_urls SET click_count = click_count + 1, last_clicked_at = NOW() WHERE short_code = ?',
-    [shortCode]
-  );
   return rows[0].post_id;
 }
 

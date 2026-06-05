@@ -14,6 +14,8 @@ export type OfferStatus =
   | 'declined'
   | 'expired';
 
+export type FeedMode = 'for_you' | 'following';
+
 export type ShareMomentType =
   | 'post_live'
   | 'first_like'
@@ -35,6 +37,17 @@ export interface UserProfile {
   shopName?: string;
   followerCount: number;
   followingCount: number;
+  /** Present when the viewer is authenticated and viewing another user's profile */
+  isFollowing?: boolean;
+}
+
+export interface PostComment {
+  id: string;
+  postId: string;
+  userId: string;
+  body: string;
+  createdAt: string;
+  author: Pick<UserProfile, 'id' | 'username' | 'displayName' | 'avatarUrl'>;
 }
 
 export interface PostMedia {

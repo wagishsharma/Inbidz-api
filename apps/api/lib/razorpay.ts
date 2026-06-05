@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { randomUUID } from 'crypto';
 import { executeQuery } from './database';
@@ -26,6 +27,20 @@ export function isDevPaymentsEnabled(): boolean {
     process.env.DEV_PAYMENTS !== 'false' &&
     !isRazorpayConfigured()
   );
+}
+
+export function verifyPaymentSignature(
+  razorpayOrderId: string,
+  razorpayPaymentId: string,
+  razorpaySignature: string
+): boolean {
+  const secret = process.env.RAZORPAY_KEY_SECRET?.trim();
+  if (!secret) return false;
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+    .digest('hex');
+  return expected === razorpaySignature;
 }
 
 export async function createDevBuyNowOrder(

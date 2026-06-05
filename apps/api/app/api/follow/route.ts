@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { followSchema } from '@inbidz/shared';
 import { requireAuth } from '@/lib/auth-jwt';
 import { executeQuery } from '@/lib/database';
 import { trackOnboardingEvent } from '@/lib/auth-user-sync';
@@ -10,8 +11,12 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const body = await request.json();
-  const userId = body.userId as string;
-  if (!userId || userId === auth.userId) {
+  const parsed = followSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  const userId = parsed.data.userId;
+  if (userId === auth.userId) {
     return NextResponse.json({ error: 'Invalid userId' }, { status: 400 });
   }
 

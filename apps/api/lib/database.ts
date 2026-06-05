@@ -36,6 +36,14 @@ export function sqlLimitOffset(limit?: number | string, offset?: number | string
   return ` LIMIT ${safeLimit} OFFSET ${safeOffset}`;
 }
 
+/** ISO / Date → MySQL DATETIME string (`YYYY-MM-DD HH:MM:SS`, UTC). */
+export function toMysqlDatetime(value?: string | Date | null): string | null {
+  if (value == null || value === '') return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 /**
  * Run a parameterized query. Uses pool.query (text protocol) so LIMIT/OFFSET placeholders work
  * when inlined via sqlLimitOffset, and avoids ER_WRONG_ARGUMENTS from pool.execute.

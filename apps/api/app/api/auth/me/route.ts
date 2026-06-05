@@ -10,6 +10,7 @@ import {
 } from '@/lib/auth-jwt';
 import { executeQuery } from '@/lib/database';
 import { mapProfile, PROFILE_SELECT } from '@/lib/post-mapper';
+import { upsertProfileFromJwt } from '@/lib/auth-user-sync';
 
 export async function GET(request: NextRequest) {
   const auth = await optionalAuth(request);
@@ -22,6 +23,12 @@ export async function GET(request: NextRequest) {
       });
     }
     return NextResponse.json({ authenticated: false }, { status: 401 });
+  }
+
+  try {
+    await upsertProfileFromJwt(auth.payload);
+  } catch (e) {
+    console.warn('[auth/me] profile sync failed:', e);
   }
 
   const profiles = await executeQuery<

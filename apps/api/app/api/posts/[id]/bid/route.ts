@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { placeBidSchema } from '@inbidz/shared';
+import { placeBidSchema, getMinimumBidAmount } from '@inbidz/shared';
 import { requireAuth } from '@/lib/auth-jwt';
 import { executeQuery, withConnection } from '@/lib/database';
 import { createShareMoment } from '@/lib/share-service';
@@ -30,7 +30,7 @@ export async function POST(
   const result = await withConnection(async (conn) => {
     const [posts] = await conn.execute(
       `SELECT p.id, p.user_id, p.commerce_mode, pc.auction_start, pc.auction_end,
-              pc.current_bid, pc.min_bid_increment, pc.bid_count, pc.reserve_price
+              pc.price, pc.current_bid, pc.min_bid_increment, pc.bid_count, pc.reserve_price
        FROM posts p
        JOIN post_commerce pc ON pc.post_id = p.id
        WHERE p.id = ? AND p.status = 'published' FOR UPDATE`,
@@ -43,6 +43,7 @@ export async function POST(
       commerce_mode: string;
       auction_start: string | null;
       auction_end: string | null;
+      price: number | null;
       current_bid: number | null;
       min_bid_increment: number | null;
       bid_count: number;
@@ -70,9 +71,11 @@ export async function POST(
       return { error: 'Auction has ended', status: 400 };
     }
 
-    const minIncrement = Number(post.min_bid_increment) || 100;
-    const currentBid = post.current_bid ? Number(post.current_bid) : 0;
-    const minRequired = currentBid > 0 ? currentBid + minIncrement : minIncrement;
+    const minRequired = getMinimumBidAmount({
+      currentBid: post.current_bid ? Number(post.current_bid) : undefined,
+      minBidIncrement: post.min_bid_increment ? Number(post.min_bid_increment) : undefined,
+      price: post.price ? Number(post.price) : undefined,
+    });
 
     if (amount < minRequired) {
       return {

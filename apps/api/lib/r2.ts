@@ -51,6 +51,10 @@ function getBucket(): string {
   return config.bucket;
 }
 
+export function getPostThumbnailKey(userId: string): string {
+  return `posts/${userId}/thumb-${randomUUID()}.jpg`;
+}
+
 export function getPostMediaKey(userId: string, filename: string): string {
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
   return `posts/${userId}/${randomUUID()}-${safe}`;

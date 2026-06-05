@@ -17,6 +17,7 @@ import { ShareMomentModal } from '@/components/ShareMomentModal';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { showAlert } from '@/lib/alert';
+import { generateVideoThumbnail } from '@/lib/video-thumbnail';
 import { colors, fonts, fs, layout, radii, shared, sp } from '@/constants/theme';
 import { getContentWidth } from '@/lib/dimensions';
 
@@ -28,6 +29,8 @@ type LocalMedia = {
   width: number;
   height: number;
   duration?: number;
+  /** First-frame preview for videos (generated on pick) */
+  thumbnailUri?: string;
 };
 
 const COMMERCE_OPTIONS: { value: CommerceMode; label: string }[] = [
@@ -38,15 +41,27 @@ const COMMERCE_OPTIONS: { value: CommerceMode; label: string }[] = [
   { value: 'buy_now_and_offers', label: 'Buy now + offers' },
 ];
 
+function getMediaPreviewUri(item: LocalMedia): string | undefined {
+  return item.type === 'video' ? item.thumbnailUri : item.uri;
+}
+
 function MediaThumbnail({ item, onRemove }: { item: LocalMedia; onRemove: () => void }) {
   const isLandscape = item.width > item.height;
+  const previewUri = getMediaPreviewUri(item);
+
   return (
     <View style={styles.thumbWrap}>
-      <Image
-        source={{ uri: item.uri }}
-        style={[styles.thumb, isLandscape && styles.thumbLandscape]}
-        contentFit="cover"
-      />
+      {previewUri ? (
+        <Image
+          source={{ uri: previewUri }}
+          style={[styles.thumb, isLandscape && styles.thumbLandscape]}
+          contentFit="cover"
+        />
+      ) : (
+        <View style={[styles.thumb, styles.thumbVideoPending]}>
+          <ActivityIndicator size="small" color={colors.accent} />
+        </View>
+      )}
       {item.type === 'video' && (
         <View style={styles.videoBadge}>
           <Text style={styles.videoBadgeText}>▶</Text>
@@ -55,6 +70,27 @@ function MediaThumbnail({ item, onRemove }: { item: LocalMedia; onRemove: () => 
       <Pressable style={styles.removeBtn} onPress={onRemove} hitSlop={8}>
         <Text style={styles.removeBtnText}>✕</Text>
       </Pressable>
+    </View>
+  );
+}
+
+function ReviewMediaPreview({ item }: { item: LocalMedia }) {
+  const preview = getMediaPreviewUri(item);
+  if (!preview) {
+    return (
+      <View style={[styles.reviewThumb, styles.thumbVideoPending]}>
+        <ActivityIndicator size="small" color={colors.accent} />
+      </View>
+    );
+  }
+  return (
+    <View style={styles.reviewThumbWrap}>
+      <Image source={{ uri: preview }} style={styles.reviewThumb} contentFit="cover" />
+      {item.type === 'video' && (
+        <View style={styles.reviewVideoBadge}>
+          <Text style={styles.videoBadgeText}>▶ Video</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -80,10 +116,12 @@ export default function CreateScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
-      quality: 0.9,
+      quality: 0.85,
       videoMaxDuration: 60,
     });
     if (result.canceled) return;
+
+    const baseIndex = media.length;
     const items: LocalMedia[] = result.assets.map((a) => ({
       uri: a.uri,
       type: a.type === 'video' ? 'video' : 'photo',
@@ -92,6 +130,18 @@ export default function CreateScreen() {
       duration: a.duration ? a.duration / 1000 : undefined,
     }));
     setMedia((prev) => [...prev, ...items]);
+
+    await Promise.all(
+      items.map(async (item, offset) => {
+        if (item.type !== 'video') return;
+        const thumbnailUri = await generateVideoThumbnail(item.uri);
+        if (!thumbnailUri) return;
+        const index = baseIndex + offset;
+        setMedia((prev) =>
+          prev.map((m, i) => (i === index ? { ...m, thumbnailUri } : m))
+        );
+      })
+    );
   };
 
   const removeMedia = (index: number) => {
@@ -106,6 +156,8 @@ export default function CreateScreen() {
     type: 'photo' | 'video';
     r2Key: string;
     publicUrl?: string;
+    thumbnailR2Key?: string;
+    thumbnailPublicUrl?: string;
     width: number;
     height: number;
     duration?: number;
@@ -115,12 +167,32 @@ export default function CreateScreen() {
     const contentType = m.type === 'video' ? 'video/mp4' : 'image/jpeg';
     const filename = `upload-${Date.now()}-${index}.${ext}`;
 
+    const uploadThumbnail = async (useDev: boolean) => {
+      if (m.type !== 'video') return {};
+      const thumbUri = m.thumbnailUri ?? (await generateVideoThumbnail(m.uri));
+      if (!thumbUri) return {};
+      const thumbFilename = `thumb-${Date.now()}-${index}.jpg`;
+      try {
+        if (useDev) {
+          const t = await api.uploadDev(token, thumbUri, thumbFilename);
+          return { thumbnailR2Key: t.key, thumbnailPublicUrl: t.publicUrl };
+        }
+        const t = await api.uploadR2(token, thumbUri, thumbFilename, 'image/jpeg');
+        return { thumbnailR2Key: t.key, thumbnailPublicUrl: t.publicUrl };
+      } catch (e) {
+        console.warn('Thumbnail upload failed', e);
+        return {};
+      }
+    };
+
     try {
       const uploaded = await api.uploadR2(token, m.uri, filename, contentType);
+      const thumb = await uploadThumbnail(false);
       return {
         type: m.type,
         r2Key: uploaded.key,
         publicUrl: uploaded.publicUrl,
+        ...thumb,
         width: m.width,
         height: m.height,
         duration: m.duration,
@@ -135,10 +207,12 @@ export default function CreateScreen() {
         message.includes('Access Denied')
       ) {
         const dev = await api.uploadDev(token, m.uri, filename);
+        const thumb = await uploadThumbnail(true);
         return {
           type: m.type,
           r2Key: dev.key,
           publicUrl: dev.publicUrl,
+          ...thumb,
           width: m.width,
           height: m.height,
           duration: m.duration,
@@ -328,13 +402,7 @@ export default function CreateScreen() {
 
       {step === 3 && (
         <>
-          {media[0] && (
-            <Image
-              source={{ uri: media[0].uri }}
-              style={styles.reviewThumb}
-              contentFit="cover"
-            />
-          )}
+          {media[0] ? <ReviewMediaPreview item={media[0]} /> : null}
           <Text style={styles.summary}>{caption || '(no caption)'}</Text>
           <Text style={styles.summary}>Mode: {commerceMode}</Text>
           {price ? <Text style={styles.summary}>Price: ₹{price}</Text> : null}
@@ -409,6 +477,11 @@ const styles = StyleSheet.create({
   },
   thumb: { width: '100%', height: '100%' },
   thumbLandscape: { backgroundColor: colors.bgMuted },
+  thumbVideoPending: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bgMuted,
+  },
   videoBadge: {
     position: 'absolute',
     bottom: sp(6),
@@ -500,11 +573,23 @@ const styles = StyleSheet.create({
     marginBottom: sp(8),
     fontSize: fs(14),
   },
+  reviewThumbWrap: {
+    position: 'relative',
+    marginBottom: sp(16),
+  },
   reviewThumb: {
     width: '100%',
     height: sp(200),
     borderRadius: radii.sm,
-    marginBottom: sp(16),
     backgroundColor: colors.bgMuted,
+  },
+  reviewVideoBadge: {
+    position: 'absolute',
+    bottom: sp(10),
+    left: sp(10),
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: radii.sm,
+    paddingHorizontal: sp(8),
+    paddingVertical: sp(4),
   },
 });

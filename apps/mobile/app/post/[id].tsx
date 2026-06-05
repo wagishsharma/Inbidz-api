@@ -1,26 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useHeaderHeight } from '@react-navigation/elements';
+import { useLocalSearchParams, router } from 'expo-router';
 import type { Post } from '@inbidz/shared';
-import { formatINR } from '@inbidz/shared';
+import { formatINR, getMinimumBidAmount } from '@inbidz/shared';
 import { AdaptiveMedia } from '@/components/AdaptiveMedia';
 import { CommerceBar } from '@/components/CommerceBar';
+import { PostCommentsSection } from '@/components/PostCommentsSection';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { Card } from '@/components/Card';
 import { Field } from '@/components/Field';
-import { showAlert, showConfirm } from '@/lib/alert';
+import { showAlert } from '@/lib/alert';
+import { completePurchase } from '@/lib/complete-purchase';
 import { colors, fonts, fs, layout, shared, sp } from '@/constants/theme';
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { accessToken, login, user } = useAuth();
+  const headerHeight = useHeaderHeight();
+  const scrollRef = useRef<ScrollView>(null);
+  const { accessToken, login, user, refreshUser } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [bidAmount, setBidAmount] = useState('');
@@ -36,35 +45,25 @@ export default function PostDetailScreen() {
       .finally(() => setLoading(false));
   }, [id, accessToken]);
 
-  const requireAuth = async () => {
-    if (!accessToken) {
-      await login();
-      return false;
-    }
-    return true;
+  const ensureFreshToken = async (): Promise<string | null> => {
+    const token = await refreshUser();
+    if (token) return token;
+    await login();
+    return refreshUser();
   };
 
   const handleBuy = async () => {
-    if (!post || !(await requireAuth()) || buying) return;
+    if (!post || buying) return;
+    const token = await ensureFreshToken();
+    if (!token) return;
     setBuying(true);
     try {
-      const order = await api.buyNow(accessToken!, post.id);
-      if (order.devMode) {
-        const confirmed = await showConfirm(
-          'Test checkout',
-          `Confirm test payment of ${formatINR(order.amount)}? (Razorpay not configured — dev mode)`
-        );
-        if (!confirmed) return;
-        await api.confirmDevOrder(accessToken!, order.orderId);
-        showAlert('Paid!', 'Test order completed.');
-        const res = await api.getPost(post.id, accessToken);
+      const order = await api.buyNow(token, post.id);
+      const result = await completePurchase(order, token);
+      if (result === 'paid') {
+        const res = await api.getPost(post.id, token);
         setPost(res.post);
-        return;
       }
-      showAlert(
-        'Checkout',
-        `Order created for ${formatINR(order.amount)}. Complete payment with Razorpay order ${order.razorpayOrderId}.`
-      );
     } catch (e) {
       showAlert('Error', e instanceof Error ? e.message : 'Buy failed');
     } finally {
@@ -73,11 +72,21 @@ export default function PostDetailScreen() {
   };
 
   const handleBid = async () => {
-    if (!post || !(await requireAuth())) return;
+    if (!post) return;
+    const token = await ensureFreshToken();
+    if (!token) return;
     const amount = parseFloat(bidAmount);
     if (!amount) return;
+    if (post.commerce) {
+      const floor = getMinimumBidAmount(post.commerce);
+      if (amount < floor) {
+        showAlert('Bid too low', `Enter at least ${formatINR(floor)}.`);
+        return;
+      }
+    }
+    Keyboard.dismiss();
     try {
-      const res = await api.placeBid(accessToken!, post.id, amount);
+      const res = await api.placeBid(token, post.id, amount);
       setPost(res.post);
       setBidAmount('');
     } catch (e) {
@@ -86,11 +95,14 @@ export default function PostDetailScreen() {
   };
 
   const handleOffer = async () => {
-    if (!post || !(await requireAuth())) return;
+    if (!post) return;
+    const token = await ensureFreshToken();
+    if (!token) return;
     const amount = parseFloat(offerAmount);
     if (!amount) return;
+    Keyboard.dismiss();
     try {
-      await api.createOffer(accessToken!, post.id, amount, offerMessage);
+      await api.createOffer(token, post.id, amount, offerMessage);
       showAlert('Offer sent', 'The seller will respond in messages.');
       setOfferAmount('');
       setOfferMessage('');
@@ -115,81 +127,129 @@ export default function PostDetailScreen() {
   const canOffer =
     !isOwner && ['offers', 'buy_now_and_offers'].includes(post.commerceMode);
 
+  const commerce = post.commerce;
+  const minBid = commerce ? getMinimumBidAmount(commerce) : null;
+
+  const scrollToActions = () => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+  };
+
   return (
-    <View style={styles.container}>
-      <AdaptiveMedia media={post.media} autoPlay />
-      <View style={styles.detail}>
-        <Text style={styles.author}>{post.author.username}</Text>
-        {post.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
-      </View>
-      <CommerceBar post={post} />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={headerHeight}
+    >
+      <ScrollView
+        ref={scrollRef}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <AdaptiveMedia media={post.media} autoPlay compact />
+        <Pressable
+          style={styles.detail}
+          onPress={() => router.push(`/user/${post.userId}`)}
+        >
+          <Text style={styles.author}>@{post.author.username}</Text>
+          {post.caption ? <Text style={styles.caption}>{post.caption}</Text> : null}
+        </Pressable>
+        <CommerceBar post={post} />
 
-      {isOwner && (
-        <View style={styles.ownerBanner}>
-          <Text style={styles.ownerBannerText}>This is your listing</Text>
-        </View>
-      )}
+        {isOwner && (
+          <View style={styles.ownerBanner}>
+            <Text style={styles.ownerBannerText}>This is your listing</Text>
+          </View>
+        )}
 
-      {(canBuy || canBid || canOffer) && (
-        <View style={styles.actionsWrap}>
-          <Card>
-            {canBuy && post.commerce?.price != null && (
-              <Pressable
-                style={[styles.ctaPrimary, buying && styles.ctaDisabled]}
-                onPress={handleBuy}
-                disabled={buying}
-              >
-                {buying ? (
-                  <ActivityIndicator color={colors.surface} />
-                ) : (
-                  <Text style={styles.ctaText}>Buy {formatINR(post.commerce.price)}</Text>
-                )}
-              </Pressable>
-            )}
-            {canBid && (
-              <View style={styles.row}>
-                <Field
-                  label="Bid amount"
-                  placeholder="Enter amount"
-                  keyboardType="numeric"
-                  value={bidAmount}
-                  onChangeText={setBidAmount}
-                  style={styles.fieldInput}
-                />
-                <Pressable style={styles.ctaSecondary} onPress={handleBid}>
-                  <Text style={styles.ctaTextSecondary}>Place bid</Text>
+        {(canBuy || canBid || canOffer) && (
+          <View style={styles.actionsWrap}>
+            <Card>
+              {canBuy && post.commerce?.price != null && (
+                <Pressable
+                  style={[styles.ctaPrimary, buying && styles.ctaDisabled]}
+                  onPress={handleBuy}
+                  disabled={buying}
+                >
+                  {buying ? (
+                    <ActivityIndicator color={colors.surface} />
+                  ) : (
+                    <Text style={styles.ctaText}>Buy {formatINR(post.commerce.price)}</Text>
+                  )}
                 </Pressable>
-              </View>
-            )}
-            {canOffer && (
-              <View style={styles.offerBox}>
-                <Field
-                  label="Your offer"
-                  placeholder="Amount in INR"
-                  keyboardType="numeric"
-                  value={offerAmount}
-                  onChangeText={setOfferAmount}
-                />
-                <Field
-                  label="Message"
-                  placeholder="Optional note to seller"
-                  value={offerMessage}
-                  onChangeText={setOfferMessage}
-                />
-                <Pressable style={styles.ctaSecondary} onPress={handleOffer}>
-                  <Text style={styles.ctaTextSecondary}>Send offer</Text>
-                </Pressable>
-              </View>
-            )}
-          </Card>
-        </View>
-      )}
-    </View>
+              )}
+              {canBid && (
+                <View style={styles.actionSection}>
+                  <Text style={styles.actionTitle}>Place a bid</Text>
+                  {commerce?.currentBid != null ? (
+                    <Text style={styles.actionHint}>
+                      Current high bid {formatINR(commerce.currentBid)}
+                      {minBid != null ? ` · enter at least ${formatINR(minBid)}` : ''}
+                    </Text>
+                  ) : minBid != null ? (
+                    <Text style={styles.actionHint}>Starting bid {formatINR(minBid)}</Text>
+                  ) : (
+                    <Text style={styles.actionHint}>Enter your bid amount in INR</Text>
+                  )}
+                  <Field
+                    label="Your bid (INR)"
+                    placeholder={minBid != null ? String(minBid) : 'Enter amount'}
+                    keyboardType="decimal-pad"
+                    value={bidAmount}
+                    onChangeText={setBidAmount}
+                    onFocus={scrollToActions}
+                  />
+                  <Pressable style={styles.ctaPrimary} onPress={handleBid}>
+                    <Text style={styles.ctaText}>Place bid</Text>
+                  </Pressable>
+                </View>
+              )}
+              {canOffer && (
+                <View style={[styles.actionSection, canBid && styles.actionSectionBorder]}>
+                  <Text style={styles.actionTitle}>Make an offer</Text>
+                  <Text style={styles.actionHint}>The seller can accept, decline, or counter.</Text>
+                  <Field
+                    label="Your offer (INR)"
+                    placeholder="Amount in INR"
+                    keyboardType="decimal-pad"
+                    value={offerAmount}
+                    onChangeText={setOfferAmount}
+                    onFocus={scrollToActions}
+                  />
+                  <Field
+                    label="Message"
+                    placeholder="Optional note to seller"
+                    value={offerMessage}
+                    onChangeText={setOfferMessage}
+                    onFocus={scrollToActions}
+                    returnKeyType="done"
+                    onSubmitEditing={() => Keyboard.dismiss()}
+                  />
+                  <Pressable style={styles.ctaSecondary} onPress={handleOffer}>
+                    <Text style={styles.ctaTextSecondary}>Send offer</Text>
+                  </Pressable>
+                </View>
+              )}
+            </Card>
+          </View>
+        )}
+
+        <PostCommentsSection
+          post={post}
+          onCommentCountChange={(count) => setPost((p) => (p ? { ...p, commentCount: count } : p))}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: shared.screen,
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: sp(32),
+  },
   center: shared.screenCenter,
   detail: {
     paddingHorizontal: layout.contentPadding,
@@ -231,7 +291,28 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-  actionsWrap: { padding: layout.contentPadding, paddingBottom: sp(24) },
+  actionsWrap: { padding: layout.contentPadding, paddingTop: sp(12) },
+  actionSection: { gap: sp(4) },
+  actionSectionBorder: {
+    marginTop: sp(20),
+    paddingTop: sp(20),
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  actionTitle: {
+    fontFamily: fonts.sans,
+    fontSize: fs(16),
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: sp(4),
+  },
+  actionHint: {
+    fontFamily: fonts.sans,
+    fontSize: fs(13),
+    color: colors.textSecondary,
+    lineHeight: fs(18),
+    marginBottom: sp(8),
+  },
   ctaPrimary: {
     ...shared.btnPrimary,
     minHeight: sp(44),
@@ -241,7 +322,4 @@ const styles = StyleSheet.create({
   ctaText: shared.btnPrimaryText,
   ctaSecondary: shared.btnOutline,
   ctaTextSecondary: shared.btnOutlineText,
-  row: { gap: sp(8) },
-  fieldInput: { marginBottom: sp(8) },
-  offerBox: { marginTop: sp(4) },
 });

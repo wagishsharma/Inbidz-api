@@ -49,6 +49,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'file required' }, { status: 400 });
   }
 
+  if (file.size === 0) {
+    return NextResponse.json({ error: 'Empty file — upload failed on device' }, { status: 400 });
+  }
+
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: 'File too large (max 50 MB)' }, { status: 413 });
   }

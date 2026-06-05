@@ -1,23 +1,38 @@
 import { formatINR } from '@inbidz/shared';
-import type { Post } from '@inbidz/shared';
+import type { FeedMode, Post } from '@inbidz/shared';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { AdaptiveMedia } from './AdaptiveMedia';
+import { UserAvatar } from './UserAvatar';
 import { router } from 'expo-router';
 import { colors, fonts, fs, radii, sp } from '@/constants/theme';
 import { getContentWidth } from '@/lib/dimensions';
+import { setImmersiveFeedSession } from '@/lib/immersive-feed';
+import { sharePost } from '@/lib/share-post';
 
 type Props = {
   post: Post;
   onLike?: () => void;
   onShare?: () => void;
+  onComment?: () => void;
   autoPlay?: boolean;
   compact?: boolean;
   /** Width of the card interior (for correct media sizing in padded lists) */
   width?: number;
+  /** Pass feed posts + index to enable swipe-up between posts in immersive mode */
+  immersiveFeed?: { posts: Post[]; index: number; feedMode?: FeedMode };
 };
 
-export function PostCard({ post, onLike, onShare, autoPlay, compact, width }: Props) {
+export function PostCard({
+  post,
+  onLike,
+  onShare,
+  onComment,
+  autoPlay,
+  compact,
+  width,
+  immersiveFeed,
+}: Props) {
   const cardWidth =
     width ??
     (compact
@@ -26,9 +41,7 @@ export function PostCard({ post, onLike, onShare, autoPlay, compact, width }: Pr
 
   const handleShare = async () => {
     onShare?.();
-    if (post.shortUrl) {
-      await Share.share({ message: post.shortUrl, url: post.shortUrl });
-    }
+    await sharePost(post);
   };
 
   const price =
@@ -37,28 +50,42 @@ export function PostCard({ post, onLike, onShare, autoPlay, compact, width }: Pr
       : null;
 
   return (
-    <Pressable
-      style={[styles.card, compact && styles.cardCompact]}
-      onPress={() => router.push(`/post/${post.id}`)}
-    >
-      <View style={styles.mediaFrame}>
+    <View style={[styles.card, compact && styles.cardCompact]}>
+      <Pressable
+        style={styles.mediaFrame}
+        onPress={() => {
+          if (immersiveFeed) {
+            setImmersiveFeedSession(
+              immersiveFeed.posts,
+              immersiveFeed.index,
+              immersiveFeed.feedMode
+            );
+          }
+          router.push(`/post/view/${post.id}`);
+        }}
+      >
         <AdaptiveMedia
           media={post.media}
           autoPlay={autoPlay}
+          loadVideo={Boolean(autoPlay)}
           compact={compact}
           width={cardWidth}
           cardLayout
         />
-      </View>
+      </Pressable>
 
       <View style={[styles.placard, compact && styles.placardCompact]}>
         <View style={styles.placardTop}>
-          <View style={styles.authorRow}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {(post.author.username?.[0] ?? '?').toUpperCase()}
-              </Text>
-            </View>
+          <Pressable
+            style={styles.authorRow}
+            onPress={() => router.push(`/user/${post.userId}`)}
+          >
+            <UserAvatar
+              uri={post.author.avatarUrl}
+              name={post.author.displayName}
+              username={post.author.username}
+              size={32}
+            />
             <View style={styles.authorMeta}>
               <Text style={styles.author} numberOfLines={1}>
                 {post.author.username}
@@ -69,7 +96,7 @@ export function PostCard({ post, onLike, onShare, autoPlay, compact, width }: Pr
                 </Text>
               ) : null}
             </View>
-          </View>
+          </Pressable>
           {price ? <Text style={styles.price}>{price}</Text> : null}
         </View>
 
@@ -89,13 +116,19 @@ export function PostCard({ post, onLike, onShare, autoPlay, compact, width }: Pr
               <Ionicons name="share-outline" size={18} color={colors.textMuted} />
               <Text style={styles.actionText}>Share</Text>
             </Pressable>
+            <Pressable style={styles.actionBtn} onPress={onComment} hitSlop={8}>
+              <Ionicons name="chatbubble-outline" size={18} color={colors.textMuted} />
+              <Text style={styles.actionText}>
+                {post.commentCount > 0 ? post.commentCount : 'Comment'}
+              </Text>
+            </Pressable>
             <Text style={styles.meta}>
-              {post.likeCount} · {post.shareCount}
+              {post.likeCount} saved
             </Text>
           </View>
         )}
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -133,20 +166,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: sp(10),
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontFamily: fonts.sans,
-    fontSize: fs(14),
-    fontWeight: '600',
-    color: colors.accent,
   },
   authorMeta: {
     flex: 1,

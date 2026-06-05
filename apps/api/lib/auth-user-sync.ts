@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { generateShortCode } from '@inbidz/shared';
 import type { AccessTokenPayload } from './auth-jwt';
+import { getAvatarUrlFromPayload } from './auth-jwt';
 import { executeQuery } from './database';
 
 export async function upsertProfileFromJwt(payload: AccessTokenPayload): Promise<void> {
@@ -8,6 +9,7 @@ export async function upsertProfileFromJwt(payload: AccessTokenPayload): Promise
   const email = payload.email ?? '';
   const baseUsername = email.split('@')[0]?.replace(/[^a-z0-9_]/gi, '').slice(0, 20) || `user${userId.slice(0, 8)}`;
   const displayName = payload.name ?? baseUsername;
+  const avatarUrl = getAvatarUrlFromPayload(payload);
 
   const existing = await executeQuery<{ user_id: string }[]>(
     'SELECT user_id FROM app_profiles WHERE user_id = ? LIMIT 1',
@@ -28,14 +30,17 @@ export async function upsertProfileFromJwt(payload: AccessTokenPayload): Promise
     }
 
     await executeQuery(
-      `INSERT INTO app_profiles (user_id, username, display_name, referral_code)
-       VALUES (?, ?, ?, ?)`,
-      [userId, username, displayName, generateShortCode(8)]
+      `INSERT INTO app_profiles (user_id, username, display_name, avatar_url, referral_code)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, username, displayName, avatarUrl, generateShortCode(8)]
     );
   } else {
     await executeQuery(
-      'UPDATE app_profiles SET display_name = COALESCE(?, display_name) WHERE user_id = ?',
-      [displayName, userId]
+      `UPDATE app_profiles SET
+        display_name = COALESCE(?, display_name),
+        avatar_url = COALESCE(?, avatar_url)
+       WHERE user_id = ?`,
+      [displayName, avatarUrl, userId]
     );
   }
 }

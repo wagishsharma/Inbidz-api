@@ -5,8 +5,10 @@ import { PostCard } from '@/components/PostCard';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { colors, fonts, fs, layout, shared, sp } from '@/constants/theme';
+import { useScrollBottomPadding } from '@/lib/tab-bar-insets';
 
 export default function ExploreScreen() {
+  const scrollBottomPad = useScrollBottomPadding();
   const { accessToken } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,14 +46,17 @@ export default function ExploreScreen() {
       numColumns={grid ? 2 : 1}
       key={grid ? 'grid' : 'list'}
       columnWrapperStyle={grid ? styles.gridRow : undefined}
-      contentContainerStyle={grid ? styles.listGrid : styles.list}
+      contentContainerStyle={[
+        grid ? styles.listGrid : styles.list,
+        { paddingBottom: scrollBottomPad },
+      ]}
       ListHeaderComponent={
         posts.length > 0 ? <Text style={styles.header}>For sale</Text> : null
       }
       ListEmptyComponent={<Text style={styles.empty}>No listings yet</Text>}
-      renderItem={({ item }) => (
+      renderItem={({ item, index }) => (
         <View style={grid ? styles.gridItem : styles.listItem}>
-          <PostCard post={item} compact={grid} />
+          <PostCard post={item} compact={grid} immersiveFeed={{ posts, index }} />
         </View>
       )}
     />

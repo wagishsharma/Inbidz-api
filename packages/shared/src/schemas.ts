@@ -18,6 +18,8 @@ export const createPostSchema = z.object({
         type: z.enum(['photo', 'video']),
         r2Key: z.string(),
         publicUrl: z.string().optional(),
+        thumbnailR2Key: z.string().optional(),
+        thumbnailPublicUrl: z.string().optional(),
         width: z.number().int().positive(),
         height: z.number().int().positive(),
         duration: z.number().optional(),
@@ -73,6 +75,12 @@ export const buyNowSchema = z.object({
     .optional(),
 });
 
+export const confirmPaymentSchema = z.object({
+  razorpayOrderId: z.string().min(1),
+  razorpayPaymentId: z.string().min(1),
+  razorpaySignature: z.string().min(1),
+});
+
 export const sendMessageSchema = z.object({
   body: z.string().min(1).max(2000),
 });
@@ -81,7 +89,12 @@ export const followSchema = z.object({
   userId: z.string(),
 });
 
+export const createCommentSchema = z.object({
+  body: z.string().min(1).max(1000),
+});
+
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 export type ShopSetupInput = z.infer<typeof shopSetupSchema>;
 export type PlaceBidInput = z.infer<typeof placeBidSchema>;
 export type CreateOfferInput = z.infer<typeof createOfferSchema>;
+export type CreateCommentInput = z.infer<typeof createCommentSchema>;
