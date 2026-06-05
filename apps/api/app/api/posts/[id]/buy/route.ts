@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { buyNowSchema } from '@inbidz/shared';
 import { requireAuth } from '@/lib/auth-jwt';
 import { executeQuery } from '@/lib/database';
+import { createCheckoutSession } from '@/lib/checkout-session';
 import { createBuyNowOrder, createDevBuyNowOrder, isDevPaymentsEnabled, isRazorpayConfigured } from '@/lib/razorpay';
 
 export async function POST(
@@ -120,10 +121,16 @@ export async function POST(
     referrerUserId
   );
 
+  const checkoutSession = await createCheckoutSession(order.orderId, auth.userId, {
+    email: auth.payload.email,
+    name: auth.payload.name,
+  });
+
   return NextResponse.json({
     orderId: order.orderId,
     razorpayOrderId: order.razorpayOrderId,
     razorpayKeyId: order.razorpayKeyId,
+    checkoutSession,
     amount: price,
     currency: 'INR',
   });

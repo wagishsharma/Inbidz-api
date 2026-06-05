@@ -86,11 +86,31 @@ else
   echo "⚠️  Not a git repository. Continuing with existing code..."
 fi
 
-echo "📦 Installing dependencies (monorepo root)..."
-npm install --production=false || {
+echo "📦 Installing dependencies (API + shared only)..."
+npm install --production=false \
+  --workspace=@inbidz/shared \
+  --workspace=@inbidz/api \
+  --include-workspace-root || {
   echo "❌ npm install failed. Exiting."
   exit 1
 }
+
+# Monorepo hoists mobile's React 19 to root; Next.js 14 requires React 18 for SSR build.
+echo "🔧 Pinning React 18 for API build..."
+npm install react@18.3.1 react-dom@18.3.1 \
+  --workspace=@inbidz/api \
+  --include-workspace-root || {
+  echo "❌ React 18 pin failed. Exiting."
+  exit 1
+}
+
+ROOT_REACT="$(node -e "console.log(require('$REPO_ROOT/node_modules/react/package.json').version)" 2>/dev/null || echo unknown)"
+if [ "$ROOT_REACT" != "18.3.1" ]; then
+  echo "❌ Root React is $ROOT_REACT (expected 18.3.1). Next.js build will fail."
+  echo "   Try: rm -rf node_modules apps/api/node_modules && re-run deploy.sh"
+  exit 1
+fi
+echo "   ✅ React $ROOT_REACT"
 
 echo "🏗 Building @inbidz/shared..."
 npm run build --workspace=@inbidz/shared || {

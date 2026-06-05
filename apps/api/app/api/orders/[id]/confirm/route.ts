@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { confirmPaymentSchema } from '@inbidz/shared';
-import { requireAuth } from '@/lib/auth-jwt';
+import { requireCheckoutAuth } from '@/lib/checkout-session';
 import { executeQuery } from '@/lib/database';
 import {
   confirmOrderPayment,
@@ -19,7 +19,7 @@ export async function POST(
     return NextResponse.json({ error: 'Payments not configured' }, { status: 503 });
   }
 
-  const auth = await requireAuth(request);
+  const auth = await requireCheckoutAuth(request, params.id);
   if (auth instanceof NextResponse) return auth;
 
   const body = await request.json().catch(() => ({}));

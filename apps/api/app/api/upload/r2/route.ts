@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-jwt';
+import { isProduction } from '@/lib/env';
 import {
   getPostMediaKey,
   getPublicUrl,
@@ -79,6 +80,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
+  if (isProduction()) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   if (!isR2Configured()) {
     return NextResponse.json({ configured: false, writable: false });
   }

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { counterOfferSchema } from '@inbidz/shared';
 import { requireAuth } from '@/lib/auth-jwt';
 import { executeQuery } from '@/lib/database';
+import { createCheckoutSession } from '@/lib/checkout-session';
 import { createBuyNowOrder, isRazorpayConfigured } from '@/lib/razorpay';
 
 export async function PATCH(
@@ -90,6 +91,11 @@ export async function PATCH(
       offerId
     );
 
+    const checkoutSession = await createCheckoutSession(order.orderId, offer.buyer_id, {
+      email: auth.payload.email,
+      name: auth.payload.name,
+    });
+
     return NextResponse.json({
       success: true,
       status: 'accepted',
@@ -97,6 +103,7 @@ export async function PATCH(
       orderId: order.orderId,
       razorpayOrderId: order.razorpayOrderId,
       razorpayKeyId: order.razorpayKeyId,
+      checkoutSession,
     });
   }
 

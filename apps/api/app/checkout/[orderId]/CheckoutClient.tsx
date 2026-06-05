@@ -26,7 +26,7 @@ declare global {
 
 type Props = {
   orderId: string;
-  token: string;
+  session: string;
   returnUrl: string;
   cancelUrl: string;
 };
@@ -42,7 +42,7 @@ function loadRazorpayScript(): Promise<void> {
   });
 }
 
-export function CheckoutClient({ orderId, token, returnUrl, cancelUrl }: Props) {
+export function CheckoutClient({ orderId, session, returnUrl, cancelUrl }: Props) {
   const [message, setMessage] = useState('Opening secure checkout…');
   const [error, setError] = useState<string | null>(null);
 
@@ -52,7 +52,7 @@ export function CheckoutClient({ orderId, token, returnUrl, cancelUrl }: Props) 
     async function startCheckout() {
       try {
         const res = await fetch(`/api/orders/${orderId}/checkout`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${session}` },
         });
         const data = (await res.json()) as CheckoutData & { error?: string; message?: string };
         if (!res.ok) {
@@ -77,7 +77,7 @@ export function CheckoutClient({ orderId, token, returnUrl, cancelUrl }: Props) 
             const confirmRes = await fetch(`/api/orders/${orderId}/confirm`, {
               method: 'POST',
               headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization: `Bearer ${session}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
@@ -113,7 +113,7 @@ export function CheckoutClient({ orderId, token, returnUrl, cancelUrl }: Props) 
     }
 
     startCheckout();
-  }, [cancelUrl, orderId, returnUrl, token]);
+  }, [cancelUrl, orderId, returnUrl, session]);
 
   return (
     <main

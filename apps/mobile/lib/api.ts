@@ -126,6 +126,7 @@ export const api = {
       orderId: string;
       razorpayOrderId?: string;
       razorpayKeyId?: string;
+      checkoutSession?: string;
       devMode?: boolean;
       amount: number;
       currency: string;

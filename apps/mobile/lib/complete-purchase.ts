@@ -10,6 +10,7 @@ export type BuyOrderResponse = {
   orderId: string;
   razorpayOrderId?: string;
   razorpayKeyId?: string;
+  checkoutSession?: string;
   devMode?: boolean;
   amount: number;
   currency: string;
@@ -17,14 +18,14 @@ export type BuyOrderResponse = {
 
 export async function openRazorpayCheckout(
   orderId: string,
-  accessToken: string
+  checkoutSession: string
 ): Promise<'success' | 'cancelled'> {
   const returnUrl = Linking.createURL('payment/success');
   const cancelUrl = Linking.createURL('payment/cancel');
   const checkoutUrl =
     `${API_URL}/checkout/${orderId}?` +
     new URLSearchParams({
-      token: accessToken,
+      session: checkoutSession,
       returnUrl,
       cancelUrl,
     }).toString();
@@ -59,7 +60,11 @@ export async function completePurchase(
     throw new Error('Payment details missing from server');
   }
 
-  const result = await openRazorpayCheckout(order.orderId, accessToken);
+  if (!order.checkoutSession) {
+    throw new Error('Checkout session missing from server');
+  }
+
+  const result = await openRazorpayCheckout(order.orderId, order.checkoutSession);
   if (result === 'success') {
     showAlert('Paid!', 'Your order is confirmed.');
     return 'paid';

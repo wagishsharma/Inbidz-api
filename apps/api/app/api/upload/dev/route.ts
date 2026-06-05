@@ -5,6 +5,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth-jwt';
+import { isDevUploadAllowed } from '@/lib/env';
 
 const UPLOAD_DIR = path.join(process.cwd(), '.uploads');
 
@@ -13,6 +14,10 @@ function getApiBase(): string {
 }
 
 export async function POST(request: NextRequest) {
+  if (!isDevUploadAllowed()) {
+    return NextResponse.json({ error: 'Not available' }, { status: 404 });
+  }
+
   const auth = await requireAuth(request);
   if (auth instanceof NextResponse) return auth;
 

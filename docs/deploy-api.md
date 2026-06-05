@@ -81,6 +81,8 @@ First deploy (no PM2 process yet) — same command; script runs `pm2 start` auto
 
 Subsequent deploys use zero-downtime `pm2 reload`.
 
+**Note:** The monorepo also contains the mobile app (React 19). `deploy.sh` installs only API + shared workspaces and pins **React 18.3.1** at the root — required for Next.js 14 production builds.
+
 ---
 
 ## Post-deploy checklist
@@ -97,6 +99,7 @@ Subsequent deploys use zero-downtime `pm2 reload`.
 - [ ] `APP_PUBLIC_URL` on API is `https://app.inbidz.com` (not staging)
 - [ ] Share link: `https://api.inbidz.com/p/{code}` loads OG page
 - [ ] Razorpay webhook URL points at `https://api.inbidz.com/api/webhooks/razorpay`
+- [ ] `RAZORPAY_WEBHOOK_SECRET` is set (webhook rejects unsigned requests)
 - [ ] `pm2 status` shows `inbidz-api` online
 
 ---

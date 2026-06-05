@@ -9,13 +9,20 @@ import { executeQuery } from '@/lib/database';
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = request.headers.get('x-razorpay-signature');
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
 
-  if (secret && signature) {
-    const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
-    if (expected !== signature) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
-    }
+  if (!secret) {
+    console.error('[razorpay webhook] RAZORPAY_WEBHOOK_SECRET is not configured');
+    return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
+  }
+
+  if (!signature) {
+    return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
+  }
+
+  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
+  if (expected !== signature) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
   const event = JSON.parse(body);

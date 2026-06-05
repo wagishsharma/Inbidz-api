@@ -2,19 +2,19 @@ import { CheckoutClient } from './CheckoutClient';
 
 type Props = {
   params: { orderId: string };
-  searchParams: { token?: string; returnUrl?: string; cancelUrl?: string };
+  searchParams: { session?: string; returnUrl?: string; cancelUrl?: string };
 };
 
 export default function CheckoutPage({ params, searchParams }: Props) {
-  const token = searchParams.token?.trim();
+  const session = searchParams.session?.trim();
   const returnUrl = searchParams.returnUrl?.trim() || 'inbidz://payment/success';
   const cancelUrl = searchParams.cancelUrl?.trim() || 'inbidz://payment/cancel';
 
-  if (!token) {
+  if (!session) {
     return (
       <main style={{ padding: 24, fontFamily: 'system-ui, sans-serif' }}>
         <h1>Checkout</h1>
-        <p>Missing session. Open checkout from the INBIDZ app.</p>
+        <p>Missing or expired checkout session. Start checkout again from the INBIDZ app.</p>
       </main>
     );
   }
@@ -22,7 +22,7 @@ export default function CheckoutPage({ params, searchParams }: Props) {
   return (
     <CheckoutClient
       orderId={params.orderId}
-      token={token}
+      session={session}
       returnUrl={returnUrl}
       cancelUrl={cancelUrl}
     />

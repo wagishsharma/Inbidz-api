@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { readFile, stat } from 'fs/promises';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
+import { isDevUploadAllowed } from '@/lib/env';
 
 const UPLOAD_DIR = path.join(process.cwd(), '.uploads');
 
@@ -21,6 +22,10 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { path: string[] } }
 ) {
+  if (!isDevUploadAllowed()) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const rel = params.path.join('/');
   if (!rel.startsWith('dev/') || rel.includes('..')) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });

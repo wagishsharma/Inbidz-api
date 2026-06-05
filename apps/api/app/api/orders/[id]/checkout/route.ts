@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth-jwt';
+import { requireCheckoutAuth } from '@/lib/checkout-session';
 import { executeQuery } from '@/lib/database';
 import { isRazorpayConfigured } from '@/lib/razorpay';
 
@@ -13,7 +13,7 @@ export async function GET(
     return NextResponse.json({ error: 'Payments not configured' }, { status: 503 });
   }
 
-  const auth = await requireAuth(request);
+  const auth = await requireCheckoutAuth(request, params.id);
   if (auth instanceof NextResponse) return auth;
 
   const rows = await executeQuery<
@@ -56,8 +56,8 @@ export async function GET(
     currency: order.currency,
     description: 'INBIDZ purchase',
     prefill: {
-      email: auth.payload.email,
-      name: auth.payload.name,
+      email: auth.email,
+      name: auth.name,
     },
   });
 }
