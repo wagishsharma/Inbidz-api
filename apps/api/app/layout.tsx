@@ -1,6 +1,10 @@
+import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-export const metadata = {
+const apiBase = (process.env.API_PUBLIC_URL || 'http://localhost:3001').replace(/\/$/, '');
+
+export const metadata: Metadata = {
+  metadataBase: new URL(apiBase),
   title: 'INBIDZ — Post it. Share it. Sell it.',
   description: 'Social commerce for creators',
 };

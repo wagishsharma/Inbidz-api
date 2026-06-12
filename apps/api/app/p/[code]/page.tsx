@@ -23,12 +23,36 @@ async function loadPost(code: string) {
   return fetchPostById(postId);
 }
 
+/** Crawlers (WhatsApp, iMessage, etc.) choke on multi-MB originals; serve a resized JPEG from our API. */
 function pickOgImage(post: NonNullable<Awaited<ReturnType<typeof loadPost>>>) {
+  return `${apiBase()}/api/og-image?post=${post.id}`;
+}
+
+function sanitizeMetaText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function pickDisplayImage(post: NonNullable<Awaited<ReturnType<typeof loadPost>>>) {
   const photo = post.media.find((m) => m.type === 'photo');
   if (photo?.url) return photo.url;
-  const first = post.media[0];
-  if (first?.url && first.type === 'photo') return first.url;
-  return `${apiBase()}/api/share-image?post=${post.id}&template=post_live`;
+  const video = post.media.find((m) => m.type === 'video');
+  if (video?.thumbnailUrl) return video.thumbnailUrl;
+  return pickOgImage(post);
+}
+
+function ogImageDimensions(post: NonNullable<Awaited<ReturnType<typeof loadPost>>>) {
+  const media =
+    post.media.find((m) => m.type === 'photo') ??
+    post.media.find((m) => m.type === 'video' && m.thumbnailUrl) ??
+    post.media[0];
+  if (!media?.width || !media?.height) {
+    return { width: 1200, height: 630 };
+  }
+  const scale = Math.min(1, 1200 / Math.max(media.width, media.height));
+  return {
+    width: Math.max(1, Math.round(media.width * scale)),
+    height: Math.max(1, Math.round(media.height * scale)),
+  };
 }
 
 export async function generateMetadata({
@@ -41,18 +65,23 @@ export async function generateMetadata({
     return { title: 'INBIDZ — Link not found' };
   }
 
-  const title = post.caption?.trim().slice(0, 80) || `@${post.author.username} on INBIDZ`;
+  const rawTitle =
+    post.caption?.trim().slice(0, 80) || `@${post.author.username} on INBIDZ`;
+  const title = sanitizeMetaText(rawTitle);
   const price =
     post.commerce?.price != null
       ? formatINR(post.commerce.price)
       : post.commerce?.currentBid != null
         ? `High bid ${formatINR(post.commerce.currentBid)}`
         : null;
-  const description = price
-    ? `${price} · ${post.author.displayName} on INBIDZ`
-    : `Post by ${post.author.displayName} on INBIDZ — Post it. Share it. Sell it.`;
+  const description = sanitizeMetaText(
+    price
+      ? `${price} · ${post.author.displayName} on INBIDZ`
+      : `Post by ${post.author.displayName} on INBIDZ — Post it. Share it. Sell it.`
+  );
 
   const ogImage = pickOgImage(post);
+  const { width, height } = ogImageDimensions(post);
   const pageUrl = `${getShortUrlBase()}/${params.code}`;
 
   return {
@@ -64,7 +93,7 @@ export async function generateMetadata({
       url: pageUrl,
       siteName: 'INBIDZ',
       type: 'website',
-      images: [{ url: ogImage, alt: title }],
+      images: [{ url: ogImage, width, height, alt: title }],
     },
     twitter: {
       card: 'summary_large_image',
@@ -80,7 +109,7 @@ export default async function ShortLinkPage({ params }: { params: { code: string
   if (!post) notFound();
 
   const appUrl = `${appBase()}/p/${params.code}`;
-  const ogImage = pickOgImage(post);
+  const displayImage = pickDisplayImage(post);
   const title = post.caption?.trim().slice(0, 80) || `@${post.author.username}`;
 
   return (
@@ -101,7 +130,7 @@ export default async function ShortLinkPage({ params }: { params: { code: string
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={ogImage}
+        src={displayImage}
         alt=""
         style={{
           maxWidth: '100%',
