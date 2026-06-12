@@ -1,20 +1,71 @@
 import mysql from 'mysql2/promise';
 
-const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'inbidz_app',
-  port: parseInt(process.env.DB_PORT || '3306', 10),
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  dateStrings: true,
+type QueryValues = (string | number | null | Date | boolean | Buffer)[];
+
+type PoolConfig = {
+  host: string;
+  user: string;
+  password: string;
+  database: string;
+  port: number;
+  connectionLimit: number;
 };
 
-const pool = mysql.createPool(dbConfig);
+function appDbConfig(): PoolConfig {
+  return {
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'inbidz_app',
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    connectionLimit: 10,
+  };
+}
 
-type QueryValues = (string | number | null | Date | boolean | Buffer)[];
+/** Read-only org DB (`inbidz_org`) for login-time profile sync. */
+function orgDbConfig(): PoolConfig | null {
+  const user = process.env.ORG_DB_USER?.trim();
+  const database = process.env.ORG_DB_NAME?.trim();
+  if (!user || !database) return null;
+
+  return {
+    host: process.env.ORG_DB_HOST?.trim() || process.env.DB_HOST || 'localhost',
+    user,
+    password: process.env.ORG_DB_PASSWORD ?? '',
+    database,
+    port: parseInt(process.env.ORG_DB_PORT || process.env.DB_PORT || '3306', 10),
+    connectionLimit: 4,
+  };
+}
+
+let appPool: mysql.Pool | null = null;
+let orgPool: mysql.Pool | null = null;
+let orgPoolChecked = false;
+
+function poolOptions(config: PoolConfig): mysql.PoolOptions {
+  return { ...config, waitForConnections: true, queueLimit: 0, dateStrings: true };
+}
+
+function getAppPool(): mysql.Pool {
+  if (!appPool) {
+    appPool = mysql.createPool(poolOptions(appDbConfig()));
+  }
+  return appPool;
+}
+
+function getOrgPool(): mysql.Pool | null {
+  if (orgPoolChecked) return orgPool;
+  orgPoolChecked = true;
+  const config = orgDbConfig();
+  if (!config) return null;
+  orgPool = mysql.createPool(poolOptions(config));
+  return orgPool;
+}
+
+/** True when ORG_DB_USER + ORG_DB_NAME are set (dedicated read-only org connection). */
+export function isOrgDbConfigured(): boolean {
+  return orgDbConfig() !== null;
+}
 
 /** Clamp pagination inputs to safe integers. */
 export function clampPagination(
@@ -45,21 +96,33 @@ export function toMysqlDatetime(value?: string | Date | null): string | null {
 }
 
 /**
- * Run a parameterized query. Uses pool.query (text protocol) so LIMIT/OFFSET placeholders work
- * when inlined via sqlLimitOffset, and avoids ER_WRONG_ARGUMENTS from pool.execute.
+ * App DB (`inbidz_app`) — all commerce/feed writes and reads.
  */
 export async function executeQuery<T = unknown>(
   query: string,
   params: QueryValues = []
 ): Promise<T> {
-  const [result] = await pool.query(query, params);
+  const [result] = await getAppPool().query(query, params);
+  return result as T;
+}
+
+/**
+ * Org DB (`inbidz_org`) — read-only login-time sync (`inbidz_org_app`).
+ * Falls back to app pool when ORG_DB_* is unset (single-DB local dev).
+ */
+export async function executeOrgQuery<T = unknown>(
+  query: string,
+  params: QueryValues = []
+): Promise<T> {
+  const target = getOrgPool() ?? getAppPool();
+  const [result] = await target.query(query, params);
   return result as T;
 }
 
 export async function withConnection<T>(
   callback: (connection: mysql.PoolConnection) => Promise<T>
 ): Promise<T> {
-  const connection = await pool.getConnection();
+  const connection = await getAppPool().getConnection();
   try {
     return await callback(connection);
   } finally {
@@ -67,4 +130,4 @@ export async function withConnection<T>(
   }
 }
 
-export default pool;
+export default getAppPool;

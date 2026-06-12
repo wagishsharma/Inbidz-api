@@ -180,6 +180,47 @@ Vercel usually applies SPA rewrites for Expo static export automatically. If dee
 - CloudFront **custom error response**: 403/404 → `/index.html` with 200  
 - ACM certificate for `app.inbidz.com`
 
+### Option E — nginx VPS (CloudPanel / static `dist/`)
+
+Expo export creates `auth/callback.html`, but nginx returns **404** for `/auth/callback` unless you map extensionless URLs to `.html` files.
+
+**Document root** must be the **`dist/`** folder (not the repo root). Example:
+
+```
+/home/inbidz-app/htdocs/app.inbidz.com/dist/
+  index.html
+  auth/callback.html   ← file exists, but /auth/callback needs try_files
+```
+
+In the site’s nginx vhost (CloudPanel → Site → Vhost), inside `server { ... }`:
+
+```nginx
+root /home/inbidz-app/htdocs/app.inbidz.com/dist;
+index index.html;
+
+location / {
+  try_files $uri $uri.html $uri/ /index.html;
+}
+```
+
+Reload:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Verify:**
+
+```bash
+curl -sI https://app.inbidz.com/auth/callback | head -3
+# Expect HTTP/2 200 (not 404)
+
+curl -sI https://app.inbidz.com/auth/callback.html | head -3
+# Also 200
+```
+
+Until nginx is updated, `/auth/callback.html?code=...` works as a temporary workaround; login should keep redirecting to `/auth/callback` (no `.html`).
+
 ---
 
 ## API & login configuration (required)

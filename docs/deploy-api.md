@@ -34,13 +34,78 @@ chmod +x apps/api/deploy.sh
 ### Required `apps/api/.env.local` (production)
 
 ```bash
+# App DB (read/write)
+DB_HOST=localhost
+DB_USER=inbidz_app_api
+DB_PASSWORD=...
+DB_NAME=inbidz_app
+
+# Org DB (read-only — login-time sync into app_profiles)
+ORG_DB_HOST=localhost
+ORG_DB_USER=inbidz_org_app
+ORG_DB_PASSWORD=...
+ORG_DB_NAME=inbidz_org
+ORG_PUBLIC_URL=https://www.inbidz.org
+
 APP_PUBLIC_URL=https://app.inbidz.com
 API_PUBLIC_URL=https://api.inbidz.com
 AUTH_LOGIN_APP_URL=https://id.inbidz.com
 SHORT_URL_BASE=https://api.inbidz.com/p
 JWT_SECRET=<same as id.inbidz.com>
-# + DB_*, R2_*, RAZORPAY_*
+# + R2_*, RAZORPAY_*
 ```
+
+**MySQL grants for read-only org user**
+
+`ERROR 1410: You are not allowed to create a user with GRANT` means your MySQL login cannot run `CREATE USER`. That is normal if you are logged in as `inbidz_app_api` or another app user — only **root** or a DBA account can create users.
+
+**Step A — run as root / admin** (once):
+
+```sql
+CREATE USER IF NOT EXISTS 'inbidz_org_app'@'localhost' IDENTIFIED BY 'choose-a-strong-password';
+-- If API and MySQL are on the same host, localhost is enough.
+-- Otherwise also: CREATE USER IF NOT EXISTS 'inbidz_org_app'@'127.0.0.1' IDENTIFIED BY '...';
+```
+
+**Step B — grants** (root/admin, or any account with `GRANT OPTION` on `inbidz_org`):
+
+```sql
+GRANT SELECT ON inbidz_org.auth_users TO 'inbidz_org_app'@'localhost';
+GRANT SELECT ON inbidz_org.artist_profiles TO 'inbidz_org_app'@'localhost';
+GRANT SELECT ON inbidz_org.artworks TO 'inbidz_org_app'@'localhost';
+GRANT SELECT ON inbidz_org.explore_featured_artists TO 'inbidz_org_app'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+Do **not** put `IDENTIFIED BY` on `GRANT` lines (removed in MySQL 8; can trigger 1410).
+
+If `inbidz_org_app` already exists, skip Step A and run only Step B.
+
+Verify:
+
+```sql
+SHOW GRANTS FOR 'inbidz_org_app'@'localhost';
+```
+
+### Feed cold-start seed (org artists → app posts)
+
+After migrations and `ORG_DB_*` are set, import public org artworks into `inbidz_app` (idempotent):
+
+```bash
+cd apps/api
+npm run migrate          # includes org_seed_artworks tracking table
+npm run seed:org-feed    # default: 40 artists × 3 artworks
+```
+
+Options:
+
+```bash
+npm run seed:org-feed -- --dry-run
+npm run seed:org-feed -- --org-urls-only   # fast: link www.inbidz.org images (no R2 download)
+npm run seed:org-feed -- --max-artists=60 --per-artist=5
+```
+
+Prefers `explore_featured_artists` when that table has rows; otherwise artists with the most public artworks. Images are mirrored to R2 when configured; posts are view-only (`commerce_mode=none`). Re-runs skip artworks already in `org_seed_artworks`.
 
 ### Reverse proxy (nginx snippet)
 

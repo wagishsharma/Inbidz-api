@@ -1,15 +1,22 @@
 import { randomUUID } from 'crypto';
 import { generateShortCode } from '@inbidz/shared';
 import type { AccessTokenPayload } from './auth-jwt';
-import { getAvatarUrlFromPayload } from './auth-jwt';
+import {
+  loadOrgArtistProfile,
+  mirrorAvatarToR2,
+  pickUsername,
+  resolveDisplayName,
+} from './org-profile-sync';
 import { executeQuery } from './database';
 
 export async function upsertProfileFromJwt(payload: AccessTokenPayload): Promise<void> {
   const userId = payload.sub;
   const email = payload.email ?? '';
-  const baseUsername = email.split('@')[0]?.replace(/[^a-z0-9_]/gi, '').slice(0, 20) || `user${userId.slice(0, 8)}`;
-  const displayName = payload.name ?? baseUsername;
-  const avatarUrl = getAvatarUrlFromPayload(payload);
+
+  const orgProfile = await loadOrgArtistProfile(userId);
+  const username = await pickUsername(userId, orgProfile?.username, email);
+  const displayName = resolveDisplayName(payload, orgProfile?.artist_name, username);
+  const avatarUrl = await mirrorAvatarToR2(userId, payload);
 
   const existing = await executeQuery<{ user_id: string }[]>(
     'SELECT user_id FROM app_profiles WHERE user_id = ? LIMIT 1',
@@ -17,18 +24,6 @@ export async function upsertProfileFromJwt(payload: AccessTokenPayload): Promise
   );
 
   if (existing.length === 0) {
-    let username = baseUsername.toLowerCase();
-    let attempt = 0;
-    while (attempt < 5) {
-      const clash = await executeQuery<{ user_id: string }[]>(
-        'SELECT user_id FROM app_profiles WHERE username = ? LIMIT 1',
-        [username]
-      );
-      if (clash.length === 0) break;
-      username = `${baseUsername}${Math.floor(Math.random() * 9999)}`.toLowerCase();
-      attempt++;
-    }
-
     await executeQuery(
       `INSERT INTO app_profiles (user_id, username, display_name, avatar_url, referral_code)
        VALUES (?, ?, ?, ?, ?)`,
@@ -37,10 +32,11 @@ export async function upsertProfileFromJwt(payload: AccessTokenPayload): Promise
   } else {
     await executeQuery(
       `UPDATE app_profiles SET
+        username = ?,
         display_name = COALESCE(?, display_name),
         avatar_url = COALESCE(?, avatar_url)
        WHERE user_id = ?`,
-      [displayName, avatarUrl, userId]
+      [username, displayName, avatarUrl, userId]
     );
   }
 }

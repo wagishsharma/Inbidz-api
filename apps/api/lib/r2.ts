@@ -84,6 +84,17 @@ export async function uploadObject(
   );
 }
 
+export async function objectExists(key: string): Promise<boolean> {
+  if (!isR2Configured()) return false;
+  try {
+    const client = getClient();
+    await client.send(new HeadObjectCommand({ Bucket: getBucket(), Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** True when credentials can write and read back an object. */
 export async function verifyR2WriteAccess(): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isR2Configured()) {
