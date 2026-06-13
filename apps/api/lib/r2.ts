@@ -55,6 +55,11 @@ export function getPostThumbnailKey(userId: string): string {
   return `posts/${userId}/thumb-${randomUUID()}.jpg`;
 }
 
+export function getAvatarKey(userId: string, ext = 'jpg'): string {
+  const safeExt = ext.replace(/[^a-z0-9]/gi, '').slice(0, 4) || 'jpg';
+  return `avatars/${userId}/${randomUUID()}.${safeExt}`;
+}
+
 export function getPostMediaKey(userId: string, filename: string): string {
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
   return `posts/${userId}/${randomUUID()}-${safe}`;

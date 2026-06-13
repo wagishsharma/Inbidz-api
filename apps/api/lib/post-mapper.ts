@@ -1,5 +1,6 @@
 import { getOrientation } from '@inbidz/shared';
 import type { CommerceMode, Post, PostCommerce, PostMedia, UserProfile } from '@inbidz/shared';
+import { resolveAvatarUrl } from './avatar-migration';
 import { getPublicUrl } from './r2';
 
 type ProfileRow = {
@@ -90,7 +91,7 @@ export function mapProfile(row: ProfileRow, followerCount = 0, followingCount = 
     id: row.user_id,
     username: row.username,
     displayName: row.display_name,
-    avatarUrl: row.avatar_url ?? undefined,
+    avatarUrl: resolveAvatarUrl(row.avatar_url),
     bio: row.bio ?? undefined,
     isSeller: Boolean(row.is_seller),
     shopName: row.shop_name ?? undefined,

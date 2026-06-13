@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { generateShortCode } from '@inbidz/shared';
 import type { AccessTokenPayload } from './auth-jwt';
 import { getAvatarUrlFromPayload } from './auth-jwt';
+import { resolveAvatarForProfile } from './avatar-migration';
 import { executeQuery } from './database';
 
 export async function upsertProfileFromJwt(payload: AccessTokenPayload): Promise<void> {
@@ -9,11 +10,17 @@ export async function upsertProfileFromJwt(payload: AccessTokenPayload): Promise
   const email = payload.email ?? '';
   const baseUsername = email.split('@')[0]?.replace(/[^a-z0-9_]/gi, '').slice(0, 20) || `user${userId.slice(0, 8)}`;
   const displayName = payload.name ?? baseUsername;
-  const avatarUrl = getAvatarUrlFromPayload(payload);
+  const jwtAvatar = getAvatarUrlFromPayload(payload);
 
-  const existing = await executeQuery<{ user_id: string }[]>(
-    'SELECT user_id FROM app_profiles WHERE user_id = ? LIMIT 1',
+  const existing = await executeQuery<{ user_id: string; avatar_url: string | null }[]>(
+    'SELECT user_id, avatar_url FROM app_profiles WHERE user_id = ? LIMIT 1',
     [userId]
+  );
+
+  const avatarUrl = await resolveAvatarForProfile(
+    userId,
+    jwtAvatar,
+    existing[0]?.avatar_url
   );
 
   if (existing.length === 0) {

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { placeBidSchema, getMinimumBidAmount } from '@inbidz/shared';
+import { resolveAvatarUrl } from '@/lib/avatar-migration';
 import { requireAuth } from '@/lib/auth-jwt';
 import { executeQuery, withConnection } from '@/lib/database';
 import { createShareMoment } from '@/lib/share-service';
@@ -171,7 +172,7 @@ export async function GET(
         id: b.user_id,
         username: b.username,
         displayName: b.display_name,
-        avatarUrl: b.avatar_url ?? undefined,
+        avatarUrl: resolveAvatarUrl(b.avatar_url),
       },
     })),
   });
