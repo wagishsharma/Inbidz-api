@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const auth = await optionalAuth(request);
-  const post = await fetchPostById(params.id, auth?.userId);
+  const post = await fetchPostById(params.id, auth?.userId, { backfillThumbnails: true });
   if (!post) {
     return NextResponse.json({ error: 'Post not found' }, { status: 404 });
   }

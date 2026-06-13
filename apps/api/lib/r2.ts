@@ -66,6 +66,31 @@ export function getPublicUrl(key: string): string {
   return key;
 }
 
+/** Download object bytes from R2. */
+export async function downloadObject(key: string): Promise<Buffer> {
+  const client = getClient();
+  const res = await client.send(
+    new GetObjectCommand({
+      Bucket: getBucket(),
+      Key: key,
+    })
+  );
+
+  const body = res.Body;
+  if (!body) throw new Error(`Empty R2 object: ${key}`);
+
+  if (typeof (body as { transformToByteArray?: () => Promise<Uint8Array> }).transformToByteArray === 'function') {
+    const bytes = await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
+    return Buffer.from(bytes);
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Buffer>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
 /** Upload bytes server-side (avoids bucket CORS + native presigned PUT issues). */
 export async function uploadObject(
   key: string,

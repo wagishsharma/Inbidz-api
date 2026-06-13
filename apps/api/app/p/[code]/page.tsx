@@ -22,7 +22,7 @@ function apiBase(): string {
 async function loadPost(code: string) {
   const postId = await peekShortCode(code);
   if (!postId) return null;
-  return fetchPostById(postId);
+  return fetchPostById(postId, undefined, { backfillThumbnails: true });
 }
 
 /** Crawlers (WhatsApp, iMessage, etc.) choke on multi-MB originals; serve a resized JPEG from our API. */

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'post required' }, { status: 400 });
   }
 
-  const post = await fetchPostById(postId);
+  const post = await fetchPostById(postId, undefined, { backfillThumbnails: true });
   if (!post || post.media.length === 0) {
     return NextResponse.json({ error: 'Post not found' }, { status: 404 });
   }

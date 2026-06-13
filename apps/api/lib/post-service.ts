@@ -10,14 +10,24 @@ import {
 } from './post-mapper';
 import { getOrCreateShortUrl } from './share-service';
 import { resolveMediaUrl } from './post-mapper';
+import {
+  backfillMissingThumbnailsForMedia,
+  generateVideoThumbnail,
+} from './video-thumbnail-service';
 
 function sanitizePublicUrl(publicUrl: string | undefined, r2Key: string): string | null {
   return resolveMediaUrl(publicUrl, r2Key);
 }
 
+export type FetchPostOptions = {
+  /** Generate missing video thumbnails server-side (slower first load). */
+  backfillThumbnails?: boolean;
+};
+
 export async function fetchPostById(
   postId: string,
-  viewerId?: string
+  viewerId?: string,
+  options?: FetchPostOptions
 ): Promise<ReturnType<typeof mapPost> | null> {
   const posts = await executeQuery<(RowDataPacket & {
     id: string;
@@ -71,18 +81,24 @@ export async function fetchPostById(
     followingRows[0]?.c ?? 0
   );
 
-  const mediaRows = await executeQuery<(RowDataPacket & {
+  let mediaRows = await executeQuery<(RowDataPacket & {
     id: string;
     post_id: string;
     media_type: 'photo' | 'video';
     r2_key: string;
     public_url: string | null;
+    thumbnail_r2_key?: string | null;
+    thumbnail_url?: string | null;
     hls_url: string | null;
     width: number;
     height: number;
     duration: number | null;
     order_index: number;
   })[]>('SELECT * FROM post_media WHERE post_id = ? ORDER BY order_index ASC', [postId]);
+
+  if (options?.backfillThumbnails) {
+    mediaRows = await backfillMissingThumbnailsForMedia(post.user_id, mediaRows);
+  }
 
   const commerceRows = await executeQuery<(RowDataPacket & {
     post_id: string;
@@ -328,9 +344,20 @@ export async function createPost(
     for (const m of input.media) {
       const mediaId = randomUUID();
       const publicUrl = sanitizePublicUrl(m.publicUrl, m.r2Key);
+      let thumbnailR2Key = m.thumbnailR2Key?.trim() || null;
+      let thumbnailPublicUrl = m.thumbnailPublicUrl;
+
+      if (m.type === 'video' && !thumbnailR2Key) {
+        const generated = await generateVideoThumbnail(userId, m.r2Key, publicUrl);
+        if (generated) {
+          thumbnailR2Key = generated.key;
+          thumbnailPublicUrl = generated.publicUrl;
+        }
+      }
+
       const thumbnailUrl =
-        m.thumbnailR2Key ?
-          sanitizePublicUrl(m.thumbnailPublicUrl, m.thumbnailR2Key)
+        thumbnailR2Key ?
+          sanitizePublicUrl(thumbnailPublicUrl, thumbnailR2Key)
         : null;
       await conn.execute(
         `INSERT INTO post_media (id, post_id, media_type, r2_key, public_url, thumbnail_r2_key, thumbnail_url, width, height, duration, order_index)
@@ -341,7 +368,7 @@ export async function createPost(
           m.type,
           m.r2Key,
           publicUrl,
-          m.thumbnailR2Key ?? null,
+          thumbnailR2Key,
           thumbnailUrl,
           m.width,
           m.height,

@@ -196,17 +196,22 @@ export default function CreateScreen() {
       const thumbUri = m.thumbnailUri ?? (await generateVideoThumbnail(m.uri));
       if (!thumbUri) return {};
       const thumbFilename = `thumb-${Date.now()}-${index}.jpg`;
-      try {
-        if (useDev) {
-          const t = await api.uploadDev(token, thumbUri, thumbFilename);
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          if (useDev) {
+            const t = await api.uploadDev(token, thumbUri, thumbFilename);
+            return { thumbnailR2Key: t.key, thumbnailPublicUrl: t.publicUrl };
+          }
+          const t = await api.uploadR2(token, thumbUri, thumbFilename, 'image/jpeg');
           return { thumbnailR2Key: t.key, thumbnailPublicUrl: t.publicUrl };
+        } catch (e) {
+          if (attempt === 2) {
+            console.warn('Thumbnail upload failed after retries', e);
+          }
         }
-        const t = await api.uploadR2(token, thumbUri, thumbFilename, 'image/jpeg');
-        return { thumbnailR2Key: t.key, thumbnailPublicUrl: t.publicUrl };
-      } catch (e) {
-        console.warn('Thumbnail upload failed', e);
-        return {};
       }
+      return {};
     };
 
     try {
