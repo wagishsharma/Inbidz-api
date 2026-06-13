@@ -26,45 +26,64 @@ function apiMediaBase(): string {
   return (process.env.API_PUBLIC_URL || 'http://localhost:3001').replace(/\/$/, '');
 }
 
+let cachedFfmpegPath: string | null | undefined;
+
 async function getFfmpegPath(): Promise<string | null> {
-  if (process.env.FFMPEG_PATH?.trim()) return process.env.FFMPEG_PATH.trim();
+  if (cachedFfmpegPath !== undefined) return cachedFfmpegPath;
+
+  if (process.env.FFMPEG_PATH?.trim()) {
+    cachedFfmpegPath = process.env.FFMPEG_PATH.trim();
+    return cachedFfmpegPath;
+  }
+
+  try {
+    await execFileAsync('ffmpeg', ['-version'], { timeout: 5000 });
+    cachedFfmpegPath = 'ffmpeg';
+    return cachedFfmpegPath;
+  } catch {
+    // system ffmpeg not available
+  }
+
   try {
     const mod = await import('ffmpeg-static');
     const binary = mod.default;
-    if (typeof binary === 'string' && binary.length > 0) return binary;
+    if (typeof binary === 'string' && binary.length > 0) {
+      cachedFfmpegPath = binary;
+      return cachedFfmpegPath;
+    }
   } catch {
     // optional dependency
   }
-  return 'ffmpeg';
+
+  cachedFfmpegPath = null;
+  return null;
 }
 
-async function extractFrameWithFfmpeg(
-  input: string,
-  isRemoteUrl: boolean
-): Promise<Buffer | null> {
+async function extractFrameWithFfmpeg(localVideoPath: string): Promise<Buffer | null> {
   const ffmpeg = await getFfmpegPath();
   if (!ffmpeg) return null;
 
   const dir = await mkdtemp(path.join(tmpdir(), 'inbidz-thumb-'));
   const outPath = path.join(dir, 'frame.jpg');
 
-  const args = ['-y'];
-  if (isRemoteUrl) {
-    args.push('-protocol_whitelist', 'file,http,https,tcp,tls');
-  }
-  args.push(
+  const args = [
+    '-y',
+    '-hide_banner',
+    '-loglevel',
+    'error',
     '-ss',
     '0.5',
     '-i',
-    input,
-    '-vframes',
+    localVideoPath,
+    '-an',
+    '-frames:v',
     '1',
     '-q:v',
     '4',
     '-vf',
     'scale=720:-2',
-    outPath
-  );
+    outPath,
+  ];
 
   try {
     await execFileAsync(ffmpeg, args, { timeout: 120_000 });
@@ -77,45 +96,79 @@ async function extractFrameWithFfmpeg(
   }
 }
 
+async function extractFrameFromLocalFile(localVideoPath: string): Promise<Buffer | null> {
+  try {
+    await readFile(localVideoPath);
+    return extractFrameWithFfmpeg(localVideoPath);
+  } catch {
+    return null;
+  }
+}
+
+async function extractFrameFromBuffer(videoBuffer: Buffer): Promise<Buffer | null> {
+  const dir = await mkdtemp(path.join(tmpdir(), 'inbidz-thumb-'));
+  const videoPath = path.join(dir, 'input.mp4');
+  try {
+    await writeFile(videoPath, videoBuffer);
+    return await extractFrameWithFfmpeg(videoPath);
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function downloadVideoBytes(
+  r2Key: string,
+  publicUrl: string | null | undefined
+): Promise<Buffer | null> {
+  if (r2Key.startsWith('dev/')) {
+    try {
+      return await readFile(path.join(UPLOAD_DIR, r2Key));
+    } catch {
+      // fall through
+    }
+  }
+
+  if (!r2Key.startsWith('dev/') && isR2Configured()) {
+    try {
+      return await downloadObject(r2Key);
+    } catch (err) {
+      console.warn('R2 video download for thumbnail failed', r2Key, err);
+    }
+  }
+
+  const resolvedUrl = resolveMediaUrl(publicUrl, r2Key);
+  if (!resolvedUrl.startsWith('http://') && !resolvedUrl.startsWith('https://')) {
+    return null;
+  }
+
+  try {
+    const res = await fetch(resolvedUrl, { signal: AbortSignal.timeout(120_000) });
+    if (!res.ok) {
+      console.warn('HTTP video download for thumbnail failed', resolvedUrl, res.status);
+      return null;
+    }
+    return Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    console.warn('HTTP video download for thumbnail failed', resolvedUrl, err);
+    return null;
+  }
+}
+
 async function extractFrameFromVideo(
   r2Key: string,
   publicUrl: string | null | undefined
 ): Promise<Buffer | null> {
-  const resolvedUrl = resolveMediaUrl(publicUrl, r2Key);
-
   if (r2Key.startsWith('dev/')) {
-    const localPath = path.join(UPLOAD_DIR, r2Key);
-    try {
-      await readFile(localPath);
-      return extractFrameWithFfmpeg(localPath, false);
-    } catch {
-      // fall through to URL fetch
-    }
+    const local = await extractFrameFromLocalFile(path.join(UPLOAD_DIR, r2Key));
+    if (local) return local;
   }
 
-  if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
-    const fromUrl = await extractFrameWithFfmpeg(resolvedUrl, true);
-    if (fromUrl) return fromUrl;
+  const videoBuffer = await downloadVideoBytes(r2Key, publicUrl);
+  if (videoBuffer) {
+    return extractFrameFromBuffer(videoBuffer);
   }
 
-  if (r2Key.startsWith('dev/')) return null;
-
-  if (!isR2Configured()) return null;
-
-  try {
-    const videoBuffer = await downloadObject(r2Key);
-    const dir = await mkdtemp(path.join(tmpdir(), 'inbidz-thumb-'));
-    const videoPath = path.join(dir, 'input.mp4');
-    try {
-      await writeFile(videoPath, videoBuffer);
-      return await extractFrameWithFfmpeg(videoPath, false);
-    } finally {
-      await rm(dir, { recursive: true, force: true }).catch(() => {});
-    }
-  } catch (err) {
-    console.warn('R2 video download for thumbnail failed', r2Key, err);
-    return null;
-  }
+  return null;
 }
 
 async function persistThumbnailJpeg(

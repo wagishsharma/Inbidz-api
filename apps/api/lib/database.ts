@@ -1,18 +1,41 @@
+import path from 'path';
 import mysql from 'mysql2/promise';
 
-const dbConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'inbidz_app',
-  port: parseInt(process.env.DB_PORT || '3306', 10),
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  dateStrings: true,
-};
+// Standalone scripts (migrate, backfill) load env before importing this module.
+function loadEnvFiles() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const dotenv = require('dotenv') as typeof import('dotenv');
+    const root = path.join(__dirname, '..');
+    dotenv.config({ path: path.join(root, '.env.local') });
+    dotenv.config({ path: path.join(root, '.env') });
+  } catch {
+    // dotenv optional when Next injects env
+  }
+}
 
-const pool = mysql.createPool(dbConfig);
+loadEnvFiles();
+
+function createPool() {
+  return mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'inbidz_app',
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    dateStrings: true,
+  });
+}
+
+let pool: mysql.Pool | null = null;
+
+function getPool(): mysql.Pool {
+  if (!pool) pool = createPool();
+  return pool;
+}
 
 type QueryValues = (string | number | null | Date | boolean | Buffer)[];
 
@@ -52,14 +75,14 @@ export async function executeQuery<T = unknown>(
   query: string,
   params: QueryValues = []
 ): Promise<T> {
-  const [result] = await pool.query(query, params);
+  const [result] = await getPool().query(query, params);
   return result as T;
 }
 
 export async function withConnection<T>(
   callback: (connection: mysql.PoolConnection) => Promise<T>
 ): Promise<T> {
-  const connection = await pool.getConnection();
+  const connection = await getPool().getConnection();
   try {
     return await callback(connection);
   } finally {
@@ -67,4 +90,4 @@ export async function withConnection<T>(
   }
 }
 
-export default pool;
+export default getPool;

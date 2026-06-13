@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3003",
     "migrate": "node scripts/migrate.js",
-    "backfill-thumbnails": "npx tsx scripts/backfill-thumbnails.ts",
+    "backfill-thumbnails": "tsx scripts/backfill-thumbnails.ts",
     "typecheck": "tsc --noEmit",
     "pm2:start": "pm2 start ecosystem.config.js --env production",
     "pm2:stop": "pm2 stop ecosystem.config.js",
@@ -37,6 +37,7 @@
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "dotenv": "^16.4.5",
+    "tsx": "^4.22.4",
     "typescript": "^5.6.3"
   }
 }

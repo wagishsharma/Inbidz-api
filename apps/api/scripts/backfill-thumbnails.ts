@@ -6,7 +6,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
-import { ensureVideoThumbnail } from '../lib/video-thumbnail-service';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -50,6 +49,9 @@ async function main() {
     console.log('No videos missing thumbnails.');
     return;
   }
+
+  // Import after dotenv so database pool picks up production credentials.
+  const { ensureVideoThumbnail } = await import('../lib/video-thumbnail-service');
 
   let ok = 0;
   let failed = 0;
