@@ -1,5 +1,5 @@
-import { createElement, useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { createElement, useCallback, useLayoutEffect, useRef } from 'react';
+import { AppState, Platform } from 'react-native';
 
 type Props = {
   uri: string;
@@ -9,6 +9,7 @@ type Props = {
   active: boolean;
   muted: boolean;
   contain?: boolean;
+  audioSyncEpoch?: number;
   onNaturalSize?: (width: number, height: number) => void;
 };
 
@@ -21,17 +22,30 @@ export function ImmersiveWebVideo({
   active,
   muted,
   contain = true,
+  audioSyncEpoch = 0,
   onNaturalSize,
 }: Props) {
   const ref = useRef<HTMLVideoElement | null>(null);
 
-  const tryPlay = () => {
+  const applyAudioState = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.muted = muted;
+    el.volume = muted ? 0 : 1;
+  }, [muted]);
+
+  const tryPlay = useCallback(() => {
     const el = ref.current;
     if (!el || !active) return;
+    applyAudioState();
     void el.play().catch(() => {});
-  };
+  }, [active, applyAudioState]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    applyAudioState();
+  }, [applyAudioState, audioSyncEpoch]);
+
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
 
@@ -41,17 +55,31 @@ export function ImmersiveWebVideo({
     }
 
     el.pause();
-  }, [active, uri]);
+  }, [active, uri, tryPlay]);
 
-  useEffect(() => {
-    if (ref.current) ref.current.muted = muted;
-  }, [muted]);
+  useLayoutEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
 
-  useEffect(() => {
-    return () => {
-      ref.current?.pause();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        applyAudioState();
+        if (active) tryPlay();
+      }
     };
-  }, []);
+
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [active, applyAudioState, tryPlay]);
+
+  useLayoutEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        applyAudioState();
+        if (active) tryPlay();
+      }
+    });
+    return () => sub.remove();
+  }, [active, applyAudioState, tryPlay]);
 
   if (Platform.OS !== 'web') {
     return null;

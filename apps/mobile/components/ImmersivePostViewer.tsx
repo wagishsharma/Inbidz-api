@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Dimensions,
   FlatList,
   Platform,
@@ -34,6 +35,9 @@ type Props = {
   active?: boolean;
   muted?: boolean;
   onToggleMute?: () => void;
+  showMuteHint?: boolean;
+  onDismissMuteHint?: () => void;
+  audioSyncEpoch?: number;
   showClose?: boolean;
   accessToken?: string | null;
   onLogin: () => Promise<void>;
@@ -45,6 +49,7 @@ function ImmersiveMediaItem({
   item,
   active,
   muted,
+  audioSyncEpoch,
   frameWidth,
   frameHeight,
   naturalWidth,
@@ -54,6 +59,7 @@ function ImmersiveMediaItem({
   item: PostMedia;
   active: boolean;
   muted: boolean;
+  audioSyncEpoch: number;
   frameWidth: number;
   frameHeight: number;
   naturalWidth?: number;
@@ -69,10 +75,34 @@ function ImmersiveMediaItem({
   );
   const fitted = fitMediaInFrame(frameWidth, frameHeight, dims.width, dims.height);
 
+  const applyAudioState = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    void video.setIsMutedAsync(muted).catch(() => {});
+    void video.setVolumeAsync(muted ? 0 : 1).catch(() => {});
+  };
+
   const tryPlay = () => {
     if (!shouldPlay) return;
+    applyAudioState();
     void videoRef.current?.playAsync().catch(() => {});
   };
+
+  useLayoutEffect(() => {
+    if (item.type !== 'video' || Platform.OS === 'web') return;
+    applyAudioState();
+  }, [muted, audioSyncEpoch, item.type]);
+
+  useLayoutEffect(() => {
+    if (item.type !== 'video' || Platform.OS === 'web') return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && shouldPlay) {
+        applyAudioState();
+        tryPlay();
+      }
+    });
+    return () => sub.remove();
+  }, [shouldPlay, muted, item.type]);
 
   useEffect(() => {
     if (item.type !== 'video') return;
@@ -116,6 +146,7 @@ function ImmersiveMediaItem({
             height={fitted.height}
             active={shouldPlay}
             muted={muted}
+            audioSyncEpoch={audioSyncEpoch}
             contain
             onNaturalSize={onVideoNaturalSize}
           />
@@ -165,6 +196,9 @@ export function ImmersivePostViewer({
   active = true,
   muted: mutedProp,
   onToggleMute,
+  showMuteHint = false,
+  onDismissMuteHint,
+  audioSyncEpoch = 0,
   showClose = true,
   accessToken,
   onLogin,
@@ -176,6 +210,14 @@ export function ImmersivePostViewer({
   const [internalMuted, setInternalMuted] = useState(true);
   const muted = mutedProp ?? internalMuted;
   const toggleMute = onToggleMute ?? (() => setInternalMuted((m) => !m));
+  const handleMutePress = () => {
+    onDismissMuteHint?.();
+    toggleMute();
+  };
+  // Keep icon in sync when parent owns mute state (immersive feed).
+  const displayMuted = mutedProp !== undefined ? mutedProp : muted;
+  const hasVideo = post.media.some((m) => m.type === 'video');
+  const showSoundHint = showMuteHint && displayMuted && hasVideo && active;
   const [liked, setLiked] = useState(post.isLiked);
   const [likeCount, setLikeCount] = useState(post.likeCount);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -263,10 +305,22 @@ export function ImmersivePostViewer({
 
   const actionsRail = (
     <>
-      {post.media.some((m) => m.type === 'video') && (
-        <Pressable style={styles.actionCircle} onPress={toggleMute}>
-          <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={26} color="#fff" />
-        </Pressable>
+      {hasVideo && (
+        <View style={styles.muteActionWrap}>
+          <Pressable
+            style={[styles.actionCircle, showSoundHint && styles.muteHintBtn]}
+            onPress={handleMutePress}
+            accessibilityLabel={displayMuted ? 'Unmute video' : 'Mute video'}
+            accessibilityHint={showSoundHint ? 'Tap to turn on sound' : undefined}
+          >
+            <Ionicons
+              name={displayMuted ? 'volume-mute' : 'volume-high'}
+              size={26}
+              color={showSoundHint ? colors.accent : '#fff'}
+            />
+          </Pressable>
+          {showSoundHint ? <Text style={styles.muteHintLabel}>Tap for sound</Text> : null}
+        </View>
       )}
       <Pressable style={styles.actionCircle} onPress={handleLike}>
         <Ionicons
@@ -381,6 +435,7 @@ export function ImmersivePostViewer({
             item={item}
             active={active && index === activeIndex}
             muted={muted}
+            audioSyncEpoch={audioSyncEpoch}
             frameWidth={mediaW}
             frameHeight={mediaH}
             naturalWidth={
@@ -594,6 +649,29 @@ const styles = StyleSheet.create({
   actionCircle: {
     alignItems: 'center',
     gap: sp(6),
+  },
+  muteActionWrap: {
+    alignItems: 'center',
+    gap: sp(4),
+  },
+  muteHintBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(70, 48, 235, 0.3)',
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  muteHintLabel: {
+    fontFamily: fonts.sans,
+    fontSize: fs(10),
+    fontWeight: '700',
+    color: colors.accent,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   actionLabel: {
     fontFamily: fonts.sans,

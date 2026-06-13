@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Dimensions,
   FlatList,
   Platform,
@@ -47,10 +48,35 @@ export function ImmersiveFeedViewer({
   const [posts, setPosts] = useState(initialPosts);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [muted, setMuted] = useState(true);
+  const [showMuteHint, setShowMuteHint] = useState(() =>
+    initialPosts.some((p) => p.media.some((m) => m.type === 'video'))
+  );
+  const [audioSyncEpoch, setAudioSyncEpoch] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
 
   const slideHeight = stage.slideHeight;
+
+  useEffect(() => {
+    if (!showMuteHint) return;
+    const t = setTimeout(() => setShowMuteHint(false), 6000);
+    return () => clearTimeout(t);
+  }, [showMuteHint]);
+
+  const handleToggleMute = useCallback(() => {
+    setMuted((m) => !m);
+    setShowMuteHint(false);
+    setAudioSyncEpoch((n) => n + 1);
+  }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        setAudioSyncEpoch((n) => n + 1);
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current;
 
@@ -136,7 +162,14 @@ export function ImmersiveFeedViewer({
               post={item}
               active={index === activeIndex}
               muted={muted}
-              onToggleMute={() => setMuted((m) => !m)}
+              onToggleMute={handleToggleMute}
+              showMuteHint={
+                showMuteHint &&
+                index === activeIndex &&
+                item.media.some((m) => m.type === 'video')
+              }
+              onDismissMuteHint={() => setShowMuteHint(false)}
+              audioSyncEpoch={audioSyncEpoch}
               showClose={false}
               accessToken={accessToken}
               onLogin={onLogin}
