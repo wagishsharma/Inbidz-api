@@ -28,12 +28,22 @@ export function ImmersiveWebVideo({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+
     if (active) {
-      void el.play().catch(() => {});
-    } else {
-      el.pause();
+      const play = () => {
+        void el.play().catch(() => {});
+      };
+      if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        play();
+      } else {
+        el.addEventListener('loadeddata', play, { once: true });
+        return () => el.removeEventListener('loadeddata', play);
+      }
+      return;
     }
-  }, [active]);
+
+    el.pause();
+  }, [active, uri]);
 
   useEffect(() => {
     if (ref.current) ref.current.muted = muted;

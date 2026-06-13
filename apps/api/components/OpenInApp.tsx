@@ -7,18 +7,47 @@ type Props = {
   scheme: string;
   webUrl: string;
   title: string;
+  /** Skip native deep link — go straight to the web app (until store builds are live). */
+  webOnly?: boolean;
 };
 
-export function OpenInApp({ code, scheme, webUrl, title }: Props) {
+export function OpenInApp({ code, scheme, webUrl, title, webOnly = false }: Props) {
   const appUrl = `${scheme}://p/${code}`;
 
   useEffect(() => {
-    // Try opening the native app (works with dev build / App Store install, not Expo Go).
+    if (webOnly) {
+      window.location.replace(webUrl);
+      return;
+    }
+
     const timer = setTimeout(() => {
       window.location.href = appUrl;
     }, 100);
     return () => clearTimeout(timer);
-  }, [appUrl]);
+  }, [appUrl, webOnly, webUrl]);
+
+  if (webOnly) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+        <p style={{ margin: 0, color: '#a3a3a3', fontSize: 14 }}>Opening in your browser…</p>
+        <a
+          href={webUrl}
+          style={{
+            display: 'inline-block',
+            background: '#4630EB',
+            color: '#fff',
+            padding: '14px 28px',
+            borderRadius: 10,
+            fontWeight: 600,
+            textDecoration: 'none',
+            fontSize: 16,
+          }}
+        >
+          Continue in browser
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>

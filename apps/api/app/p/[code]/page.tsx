@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
+import { notFound, redirect } from 'next/navigation';
 import { peekShortCode, getShortUrlBase } from '@/lib/share-service';
 import { fetchPostById } from '@/lib/post-service';
 import { formatINR } from '@inbidz/shared';
+import { isNativeAppReady, isSharePreviewCrawler } from '@/lib/share-landing';
 import { OpenInApp } from '@/components/OpenInApp';
 
 function appBase(): string {
@@ -109,6 +111,15 @@ export default async function ShortLinkPage({ params }: { params: { code: string
   if (!post) notFound();
 
   const appUrl = `${appBase()}/p/${params.code}`;
+  const webOnly = !isNativeAppReady();
+
+  if (webOnly) {
+    const ua = headers().get('user-agent') ?? '';
+    if (!isSharePreviewCrawler(ua)) {
+      redirect(appUrl);
+    }
+  }
+
   const displayImage = pickDisplayImage(post);
   const title = post.caption?.trim().slice(0, 80) || `@${post.author.username}`;
 
@@ -154,6 +165,7 @@ export default async function ShortLinkPage({ params }: { params: { code: string
         scheme={appScheme()}
         webUrl={appUrl}
         title={title}
+        webOnly={webOnly}
       />
     </main>
   );

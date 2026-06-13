@@ -54,14 +54,23 @@ export function ImmersiveFeedViewer({
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current;
 
-  const onViewableItemsChanged = useCallback(
+  const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       const top = viewableItems.find((v) => v.isViewable);
       if (top?.index != null) {
         setActiveIndex(top.index);
       }
+    }
+  ).current;
+
+  const syncActiveIndex = useCallback(
+    (offsetY: number) => {
+      const idx = Math.round(offsetY / slideHeight);
+      if (idx >= 0 && idx < posts.length) {
+        setActiveIndex(idx);
+      }
     },
-    []
+    [posts.length, slideHeight]
   );
 
   const updatePosts = useCallback(
@@ -120,7 +129,7 @@ export function ImmersiveFeedViewer({
         initialNumToRender={1}
         maxToRenderPerBatch={2}
         windowSize={IMMERSIVE_LIST_WINDOW}
-        removeClippedSubviews={Platform.OS !== 'web'}
+        removeClippedSubviews={false}
         renderItem={({ item, index }) => (
           <View style={[styles.slide, { height: slideHeight }]}>
             <ImmersivePostViewer
@@ -149,6 +158,8 @@ export function ImmersiveFeedViewer({
         })}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
+        onMomentumScrollEnd={(e) => syncActiveIndex(e.nativeEvent.contentOffset.y)}
+        onScrollEndDrag={(e) => syncActiveIndex(e.nativeEvent.contentOffset.y)}
         onEndReached={loadMore}
         onEndReachedThreshold={2}
       />

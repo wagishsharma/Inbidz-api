@@ -62,6 +62,7 @@ function ImmersiveMediaItem({
 }) {
   const videoRef = useRef<Video>(null);
   const shouldPlay = active && item.type === 'video';
+  const videoUri = item.type === 'video' ? item.hlsUrl || item.url : '';
   const dims = normalizeMediaDimensions(
     naturalWidth ?? item.width,
     naturalHeight ?? item.height
@@ -69,10 +70,15 @@ function ImmersiveMediaItem({
   const fitted = fitMediaInFrame(frameWidth, frameHeight, dims.width, dims.height);
 
   useEffect(() => {
-    if (!shouldPlay) {
-      videoRef.current?.pauseAsync().catch(() => {});
+    if (item.type !== 'video') return;
+    const video = videoRef.current;
+    if (!video) return;
+    if (shouldPlay) {
+      void video.playAsync().catch(() => {});
+    } else {
+      void video.pauseAsync().catch(() => {});
     }
-  }, [shouldPlay]);
+  }, [shouldPlay, videoUri, item.type]);
 
   useEffect(() => {
     return () => {
@@ -92,23 +98,7 @@ function ImmersiveMediaItem({
 
   if (item.type === 'video') {
     const poster = item.thumbnailUrl;
-    const uri = item.hlsUrl || item.url;
-
-    if (!active) {
-      return (
-        <View style={[styles.mediaSlide, { width: frameWidth, height: frameHeight }]}>
-          {poster ? (
-            <Image
-              source={{ uri: poster }}
-              style={{ width: fitted.width, height: fitted.height }}
-              contentFit="contain"
-            />
-          ) : (
-            <View style={[styles.videoPosterFallback, { width: fitted.width, height: fitted.height }]} />
-          )}
-        </View>
-      );
-    }
+    const uri = videoUri;
 
     if (Platform.OS === 'web') {
       return (
