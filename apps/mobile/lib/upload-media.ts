@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { API_URL } from './config';
 
 type UploadResult = { key: string; publicUrl: string };
+export type UploadProgressCallback = (progress: number) => void;
 
 function authHeaders(token: string): Record<string, string> {
   if (token && token.split('.').length === 3) {
@@ -20,6 +21,15 @@ function parseUploadResponse(status: number, body: string): UploadResult {
     throw new Error('Invalid upload response');
   }
   return { key: data.key, publicUrl: data.publicUrl };
+}
+
+function reportProgress(
+  onProgress: UploadProgressCallback | undefined,
+  sent: number,
+  total: number
+) {
+  if (!onProgress || total <= 0) return;
+  onProgress(Math.min(1, sent / total));
 }
 
 /** Ensure picker URI is a readable file:// path (copy content:// / ph:// to cache). */
@@ -48,19 +58,39 @@ async function uploadMultipartNative(
   uri: string,
   filename: string,
   contentType: string,
-  token: string
+  token: string,
+  onProgress?: UploadProgressCallback
 ): Promise<UploadResult> {
   const fileUri = await ensureUploadUri(uri, filename);
-
-  const result = await FileSystem.uploadAsync(`${API_URL}${path}`, fileUri, {
-    httpMethod: 'POST',
+  const url = `${API_URL}${path}`;
+  const options = {
+    httpMethod: 'POST' as const,
     uploadType: FileSystem.FileSystemUploadType.MULTIPART,
     fieldName: 'file',
     mimeType: contentType,
     parameters: { filename, contentType },
     headers: authHeaders(token),
-  });
+  };
 
+  const fs = FileSystem as typeof FileSystem & {
+    createUploadTask?: (
+      uploadUrl: string,
+      uploadUri: string,
+      uploadOptions: typeof options,
+      callback?: (data: { totalBytesSent: number; totalBytesExpectedToSend: number }) => void
+    ) => { uploadAsync: () => Promise<{ status: number; body: string }> };
+  };
+
+  if (fs.createUploadTask && onProgress) {
+    const task = fs.createUploadTask(url, fileUri, options, (data) => {
+      reportProgress(onProgress, data.totalBytesSent, data.totalBytesExpectedToSend);
+    });
+    const result = await task.uploadAsync();
+    return parseUploadResponse(result.status, result.body);
+  }
+
+  const result = await FileSystem.uploadAsync(url, fileUri, options);
+  onProgress?.(1);
   return parseUploadResponse(result.status, result.body);
 }
 
@@ -69,7 +99,8 @@ async function uploadMultipartWeb(
   uri: string,
   filename: string,
   contentType: string,
-  token: string
+  token: string,
+  onProgress?: UploadProgressCallback
 ): Promise<UploadResult> {
   const blob = await fetch(uri).then((r) => r.blob());
   if (blob.size === 0) {
@@ -81,37 +112,55 @@ async function uploadMultipartWeb(
   form.append('filename', filename);
   form.append('contentType', contentType);
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: form,
-    credentials: 'include',
-  });
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_URL}${path}`);
+    const headers = authHeaders(token);
+    for (const [key, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(key, value);
+    }
+    xhr.withCredentials = true;
 
-  const text = await res.text();
-  return parseUploadResponse(res.status, text);
+    xhr.upload.onprogress = (event) => {
+      reportProgress(onProgress, event.loaded, event.total);
+    };
+
+    xhr.onload = () => {
+      try {
+        resolve(parseUploadResponse(xhr.status, xhr.responseText));
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Upload failed — check your connection'));
+    xhr.onabort = () => reject(new Error('Upload cancelled'));
+    xhr.send(form);
+  });
 }
 
 export async function uploadR2File(
   token: string,
   uri: string,
   filename: string,
-  contentType: string
+  contentType: string,
+  onProgress?: UploadProgressCallback
 ): Promise<UploadResult> {
   if (Platform.OS === 'web') {
-    return uploadMultipartWeb('/api/upload/r2', uri, filename, contentType, token);
+    return uploadMultipartWeb('/api/upload/r2', uri, filename, contentType, token, onProgress);
   }
-  return uploadMultipartNative('/api/upload/r2', uri, filename, contentType, token);
+  return uploadMultipartNative('/api/upload/r2', uri, filename, contentType, token, onProgress);
 }
 
 export async function uploadDevFile(
   token: string,
   uri: string,
   filename: string,
-  contentType: string
+  contentType: string,
+  onProgress?: UploadProgressCallback
 ): Promise<UploadResult> {
   if (Platform.OS === 'web') {
-    return uploadMultipartWeb('/api/upload/dev', uri, filename, contentType, token);
+    return uploadMultipartWeb('/api/upload/dev', uri, filename, contentType, token, onProgress);
   }
-  return uploadMultipartNative('/api/upload/dev', uri, filename, contentType, token);
+  return uploadMultipartNative('/api/upload/dev', uri, filename, contentType, token, onProgress);
 }

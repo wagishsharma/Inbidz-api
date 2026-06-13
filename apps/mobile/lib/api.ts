@@ -1,6 +1,6 @@
 import { API_URL } from './config';
 import type { FeedMode, Post, PostComment, ShareMomentType, UserProfile } from '@inbidz/shared';
-import { uploadDevFile, uploadR2File } from './upload-media';
+import { uploadDevFile, uploadR2File, type UploadProgressCallback } from './upload-media';
 
 type RequestOptions = {
   method?: string;
@@ -179,12 +179,17 @@ export const api = {
       r2Error?: string;
     }>('/api/upload/presign', { method: 'POST', body: { filename, contentType }, token }),
 
-  uploadR2: (token: string, uri: string, filename: string, contentType: string) =>
-    uploadR2File(token, uri, filename, contentType),
+  uploadR2: (
+    token: string,
+    uri: string,
+    filename: string,
+    contentType: string,
+    onProgress?: UploadProgressCallback
+  ) => uploadR2File(token, uri, filename, contentType, onProgress),
 
-  uploadDev: (token: string, uri: string, filename: string) => {
+  uploadDev: (token: string, uri: string, filename: string, onProgress?: UploadProgressCallback) => {
     const contentType = filename.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg';
-    return uploadDevFile(token, uri, filename, contentType);
+    return uploadDevFile(token, uri, filename, contentType, onProgress);
   },
 
   createShareMoment: (

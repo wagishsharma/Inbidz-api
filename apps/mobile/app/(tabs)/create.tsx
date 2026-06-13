@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import type { CommerceMode } from '@inbidz/shared';
 import { ShareMomentModal } from '@/components/ShareMomentModal';
+import { UploadProgressOverlay } from '@/components/UploadProgressOverlay';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { showAlert } from '@/lib/alert';
@@ -31,6 +32,13 @@ type LocalMedia = {
   duration?: number;
   /** First-frame preview for videos (generated on pick) */
   thumbnailUri?: string;
+  thumbnailStatus?: 'generating' | 'ready' | 'failed';
+};
+
+type UploadUiState = {
+  title: string;
+  subtitle?: string;
+  progress: number | null;
 };
 
 const COMMERCE_OPTIONS: { value: CommerceMode; label: string }[] = [
@@ -48,6 +56,7 @@ function getMediaPreviewUri(item: LocalMedia): string | undefined {
 function MediaThumbnail({ item, onRemove }: { item: LocalMedia; onRemove: () => void }) {
   const isLandscape = item.width > item.height;
   const previewUri = getMediaPreviewUri(item);
+  const preparing = item.type === 'video' && item.thumbnailStatus === 'generating';
 
   return (
     <View style={styles.thumbWrap}>
@@ -60,6 +69,7 @@ function MediaThumbnail({ item, onRemove }: { item: LocalMedia; onRemove: () => 
       ) : (
         <View style={[styles.thumb, styles.thumbVideoPending]}>
           <ActivityIndicator size="small" color={colors.accent} />
+          {preparing ? <Text style={styles.thumbPendingText}>Preparing…</Text> : null}
         </View>
       )}
       {item.type === 'video' && (
@@ -76,10 +86,14 @@ function MediaThumbnail({ item, onRemove }: { item: LocalMedia; onRemove: () => 
 
 function ReviewMediaPreview({ item }: { item: LocalMedia }) {
   const preview = getMediaPreviewUri(item);
+  const preparing = item.type === 'video' && item.thumbnailStatus === 'generating';
   if (!preview) {
     return (
       <View style={[styles.reviewThumb, styles.thumbVideoPending]}>
         <ActivityIndicator size="small" color={colors.accent} />
+        <Text style={styles.thumbPendingText}>
+          {preparing ? 'Preparing video preview…' : 'Loading preview…'}
+        </Text>
       </View>
     );
   }
@@ -105,6 +119,7 @@ export default function CreateScreen() {
   const [inventory, setInventory] = useState('1');
   const [auctionHours, setAuctionHours] = useState('24');
   const [submitting, setSubmitting] = useState(false);
+  const [uploadUi, setUploadUi] = useState<UploadUiState | null>(null);
   const [shareModal, setShareModal] = useState<{
     title: string;
     shortUrl: string;
@@ -128,17 +143,25 @@ export default function CreateScreen() {
       width: a.width ?? 1080,
       height: a.height ?? 1080,
       duration: a.duration ? a.duration / 1000 : undefined,
+      thumbnailStatus: a.type === 'video' ? 'generating' : undefined,
     }));
     setMedia((prev) => [...prev, ...items]);
 
     await Promise.all(
       items.map(async (item, offset) => {
         if (item.type !== 'video') return;
-        const thumbnailUri = await generateVideoThumbnail(item.uri);
-        if (!thumbnailUri) return;
         const index = baseIndex + offset;
+        const thumbnailUri = await generateVideoThumbnail(item.uri);
         setMedia((prev) =>
-          prev.map((m, i) => (i === index ? { ...m, thumbnailUri } : m))
+          prev.map((m, i) =>
+            i === index
+              ? {
+                  ...m,
+                  thumbnailUri: thumbnailUri ?? undefined,
+                  thumbnailStatus: thumbnailUri ? 'ready' : 'failed',
+                }
+              : m
+          )
         );
       })
     );
@@ -151,7 +174,8 @@ export default function CreateScreen() {
   const uploadMediaItem = async (
     m: LocalMedia,
     index: number,
-    token: string
+    token: string,
+    onProgress?: (progress: number) => void
   ): Promise<{
     type: 'photo' | 'video';
     r2Key: string;
@@ -186,8 +210,11 @@ export default function CreateScreen() {
     };
 
     try {
-      const uploaded = await api.uploadR2(token, m.uri, filename, contentType);
+      const uploaded = await api.uploadR2(token, m.uri, filename, contentType, (p) =>
+        onProgress?.(p * 0.92)
+      );
       const thumb = await uploadThumbnail(false);
+      onProgress?.(1);
       return {
         type: m.type,
         r2Key: uploaded.key,
@@ -206,8 +233,9 @@ export default function CreateScreen() {
         message.includes('Object Read & Write') ||
         message.includes('Access Denied')
       ) {
-        const dev = await api.uploadDev(token, m.uri, filename);
+        const dev = await api.uploadDev(token, m.uri, filename, (p) => onProgress?.(p * 0.92));
         const thumb = await uploadThumbnail(true);
+        onProgress?.(1);
         return {
           type: m.type,
           r2Key: dev.key,
@@ -243,9 +271,34 @@ export default function CreateScreen() {
 
     setSubmitting(true);
     try {
-      const uploaded = await Promise.all(
-        media.map((m, index) => uploadMediaItem(m, index, accessToken))
-      );
+      const uploaded = [];
+      for (let index = 0; index < media.length; index++) {
+        const item = media[index];
+        const label =
+          item.type === 'video'
+            ? 'Uploading video…'
+            : media.length > 1
+              ? `Uploading photo ${index + 1} of ${media.length}…`
+              : 'Uploading photo…';
+
+        setUploadUi({
+          title: label,
+          subtitle: media.length > 1 ? `${index + 1} of ${media.length}` : undefined,
+          progress: 0,
+        });
+
+        uploaded.push(
+          await uploadMediaItem(item, index, accessToken, (progress) => {
+            setUploadUi((prev) => (prev ? { ...prev, progress } : prev));
+          })
+        );
+      }
+
+      setUploadUi({
+        title: 'Publishing post…',
+        subtitle: 'Almost done',
+        progress: null,
+      });
 
       const postType =
         uploaded.length > 1 ? 'carousel' : uploaded[0].type === 'video' ? 'video' : 'photo';
@@ -294,9 +347,10 @@ export default function CreateScreen() {
       setPrice('');
       setStep(1);
     } catch (e) {
-      showAlert('Error', e instanceof Error ? e.message : 'Failed to publish');
+      showAlert('Upload failed', e instanceof Error ? e.message : 'Failed to publish');
     } finally {
       setSubmitting(false);
+      setUploadUi(null);
     }
   };
 
@@ -408,16 +462,23 @@ export default function CreateScreen() {
           {price ? <Text style={styles.summary}>Price: ₹{price}</Text> : null}
           <Pressable style={styles.publishBtn} onPress={publish} disabled={submitting}>
             {submitting ? (
-              <ActivityIndicator color="#fff" />
+              <Text style={styles.publishText}>Uploading…</Text>
             ) : (
               <Text style={styles.publishText}>Publish</Text>
             )}
           </Pressable>
-          <Pressable style={styles.backBtn} onPress={() => setStep(2)}>
+          <Pressable style={styles.backBtn} onPress={() => setStep(2)} disabled={submitting}>
             <Text style={styles.backText}>Back</Text>
           </Pressable>
         </>
       )}
+
+      <UploadProgressOverlay
+        visible={!!uploadUi}
+        title={uploadUi?.title ?? ''}
+        subtitle={uploadUi?.subtitle}
+        progress={uploadUi?.progress ?? null}
+      />
 
       {shareModal && (
         <ShareMomentModal
@@ -481,6 +542,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bgMuted,
+    gap: sp(6),
+  },
+  thumbPendingText: {
+    fontFamily: fonts.sans,
+    fontSize: fs(10),
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   videoBadge: {
     position: 'absolute',
