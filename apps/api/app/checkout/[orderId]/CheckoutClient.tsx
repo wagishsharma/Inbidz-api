@@ -36,10 +36,22 @@ function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Razorpay'));
-    document.body.appendChild(script);
+    script.onerror = () => reject(new Error('Could not load Razorpay. Check your connection and try again.'));
+    document.head.appendChild(script);
   });
+}
+
+async function loadRazorpayWithRetry(): Promise<void> {
+  try {
+    await loadRazorpayScript();
+  } catch (first) {
+    await new Promise((r) => setTimeout(r, 800));
+    await loadRazorpayScript().catch(() => {
+      throw first;
+    });
+  }
 }
 
 export function CheckoutClient({ orderId, session, returnUrl, cancelUrl }: Props) {
@@ -59,7 +71,7 @@ export function CheckoutClient({ orderId, session, returnUrl, cancelUrl }: Props
           throw new Error(data.message ?? data.error ?? 'Could not load checkout');
         }
 
-        await loadRazorpayScript();
+        await loadRazorpayWithRetry();
         if (!window.Razorpay || opened) return;
         opened = true;
 

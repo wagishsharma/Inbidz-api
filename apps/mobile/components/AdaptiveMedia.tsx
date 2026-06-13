@@ -31,11 +31,7 @@ function getMediaHeight(
 ): number {
   if (cardLayout) {
     if (item.type === 'video' && item.width > 0 && item.height > 0) {
-      const { width: mw, height: mh } = normalizeMediaDimensions(
-        item.width,
-        item.height,
-        item.orientation
-      );
+      const { width: mw, height: mh } = normalizeMediaDimensions(item.width, item.height);
       return width * (mh / mw);
     }
     return width * (item.type === 'video' ? VIDEO_ASPECT : PHOTO_ASPECT);

@@ -16,6 +16,8 @@ export type BuyOrderResponse = {
   currency: string;
 };
 
+export type PurchaseResult = 'paid' | 'cancelled';
+
 export async function openRazorpayCheckout(
   orderId: string,
   checkoutSession: string
@@ -32,9 +34,11 @@ export async function openRazorpayCheckout(
 
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined') {
-      window.location.href = checkoutUrl;
+      // Leave the app for hosted checkout; do not resolve until the page unloads.
+      window.location.assign(checkoutUrl);
+      await new Promise<never>(() => {});
     }
-    return 'success';
+    return 'cancelled';
   }
 
   const result = await WebBrowser.openAuthSessionAsync(checkoutUrl, returnUrl);
@@ -44,7 +48,7 @@ export async function openRazorpayCheckout(
 export async function completePurchase(
   order: BuyOrderResponse,
   accessToken: string
-): Promise<'paid' | 'cancelled'> {
+): Promise<PurchaseResult> {
   if (order.devMode) {
     const confirmed = await showConfirm(
       'Test checkout',
@@ -66,7 +70,9 @@ export async function completePurchase(
 
   const result = await openRazorpayCheckout(order.orderId, order.checkoutSession);
   if (result === 'success') {
-    showAlert('Paid!', 'Your order is confirmed.');
+    if (Platform.OS !== 'web') {
+      showAlert('Paid!', 'Your order is confirmed.');
+    }
     return 'paid';
   }
   return 'cancelled';

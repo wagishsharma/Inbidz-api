@@ -8,10 +8,11 @@ type Props = {
   height: number;
   active: boolean;
   muted: boolean;
+  contain?: boolean;
   onNaturalSize?: (width: number, height: number) => void;
 };
 
-/** HTML5 video for web immersive — expo-av often clips instead of scaling like native. */
+/** HTML5 video for web immersive — preserve source aspect ratio (letterbox). */
 export function ImmersiveWebVideo({
   uri,
   poster,
@@ -19,6 +20,7 @@ export function ImmersiveWebVideo({
   height,
   active,
   muted,
+  contain = true,
   onNaturalSize,
 }: Props) {
   const ref = useRef<HTMLVideoElement | null>(null);
@@ -64,7 +66,7 @@ export function ImmersiveWebVideo({
     style: {
       width,
       height,
-      objectFit: 'cover',
+      objectFit: contain ? 'contain' : 'cover',
       objectPosition: 'center',
       display: 'block',
       backgroundColor: '#000',

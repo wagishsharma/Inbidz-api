@@ -41,9 +41,7 @@ export function stageSizeForMedia(
   maxHeight: number
 ): { stageWidth: number; stageHeight: number } {
   if (!mediaW || !mediaH) {
-    const stageHeight = maxHeight;
-    const stageWidth = Math.min(maxWidth, Math.floor(stageHeight * (9 / 16)));
-    return { stageWidth, stageHeight };
+    return { stageWidth: maxWidth, stageHeight: maxHeight };
   }
 
   const aspect = mediaW / mediaH;
@@ -61,20 +59,13 @@ export function stageSizeForMedia(
   };
 }
 
-/** Prefer orientation when stored width/height disagree (common with phone video). */
+/** Use stored pixel dimensions as-is; do not rotate based on orientation metadata. */
 export function normalizeMediaDimensions(
   width?: number,
-  height?: number,
-  orientation?: 'portrait' | 'landscape' | 'square'
+  height?: number
 ): { width: number; height: number } {
   if (!width || !height) {
-    return { width: 9, height: 16 };
-  }
-  if (orientation === 'portrait' && width > height) {
-    return { width: height, height: width };
-  }
-  if (orientation === 'landscape' && height > width) {
-    return { width: height, height: width };
+    return { width: 16, height: 9 };
   }
   return { width, height };
 }

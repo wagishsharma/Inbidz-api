@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -25,7 +25,7 @@ import { sharePost } from '@/lib/share-post';
 import { UserAvatar } from '@/components/UserAvatar';
 import { useAuth } from '@/lib/auth';
 import { ImmersiveWebVideo } from '@/components/ImmersiveWebVideo';
-import { normalizeMediaDimensions, useImmersiveStageSize } from '@/lib/use-immersive-stage';
+import { fitMediaInFrame, normalizeMediaDimensions, useImmersiveStageSize } from '@/lib/use-immersive-stage';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -45,21 +45,28 @@ function ImmersiveMediaItem({
   item,
   active,
   muted,
-  width,
-  height,
+  frameWidth,
+  frameHeight,
+  naturalWidth,
+  naturalHeight,
   onVideoNaturalSize,
 }: {
   item: PostMedia;
   active: boolean;
   muted: boolean;
-  width: number;
-  height: number;
+  frameWidth: number;
+  frameHeight: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
   onVideoNaturalSize?: (w: number, h: number) => void;
 }) {
   const videoRef = useRef<Video>(null);
   const shouldPlay = active && item.type === 'video';
-  const isLandscape = item.orientation === 'landscape';
-  const useContain = isLandscape;
+  const dims = normalizeMediaDimensions(
+    naturalWidth ?? item.width,
+    naturalHeight ?? item.height
+  );
+  const fitted = fitMediaInFrame(frameWidth, frameHeight, dims.width, dims.height);
 
   useEffect(() => {
     if (!shouldPlay) {
@@ -73,21 +80,31 @@ function ImmersiveMediaItem({
     };
   }, []);
 
+  const handlePlaybackStatus = (status: AVPlaybackStatus) => {
+    if (!status.isLoaded || !onVideoNaturalSize) return;
+    const size = (
+      status as AVPlaybackStatus & { naturalSize?: { width: number; height: number } }
+    ).naturalSize;
+    if (size?.width && size?.height) {
+      onVideoNaturalSize(size.width, size.height);
+    }
+  };
+
   if (item.type === 'video') {
     const poster = item.thumbnailUrl;
     const uri = item.hlsUrl || item.url;
 
     if (!active) {
       return (
-        <View style={[styles.mediaSlide, { width, height }]}>
+        <View style={[styles.mediaSlide, { width: frameWidth, height: frameHeight }]}>
           {poster ? (
             <Image
               source={{ uri: poster }}
-              style={{ width, height }}
-              contentFit={useContain ? 'contain' : 'cover'}
+              style={{ width: fitted.width, height: fitted.height }}
+              contentFit="contain"
             />
           ) : (
-            <View style={[styles.videoPosterFallback, { width, height }]} />
+            <View style={[styles.videoPosterFallback, { width: fitted.width, height: fitted.height }]} />
           )}
         </View>
       );
@@ -95,14 +112,15 @@ function ImmersiveMediaItem({
 
     if (Platform.OS === 'web') {
       return (
-        <View style={[styles.mediaSlide, { width, height }]}>
+        <View style={[styles.mediaSlide, { width: frameWidth, height: frameHeight }]}>
           <ImmersiveWebVideo
             uri={uri}
             poster={poster}
-            width={width}
-            height={height}
+            width={fitted.width}
+            height={fitted.height}
             active={shouldPlay}
             muted={muted}
+            contain
             onNaturalSize={onVideoNaturalSize}
           />
         </View>
@@ -110,29 +128,30 @@ function ImmersiveMediaItem({
     }
 
     return (
-      <View style={[styles.mediaSlide, { width, height }]}>
+      <View style={[styles.mediaSlide, { width: frameWidth, height: frameHeight }]}>
         <Video
           ref={videoRef}
           source={{ uri }}
-          style={{ width, height }}
-          resizeMode={useContain ? ResizeMode.CONTAIN : ResizeMode.COVER}
+          style={{ width: fitted.width, height: fitted.height }}
+          resizeMode={ResizeMode.CONTAIN}
           shouldPlay={shouldPlay}
           isLooping
           isMuted={muted}
           usePoster={Boolean(poster)}
           posterSource={poster ? { uri: poster } : undefined}
-          posterStyle={{ width, height }}
+          posterStyle={{ width: fitted.width, height: fitted.height }}
+          onPlaybackStatusUpdate={handlePlaybackStatus}
         />
       </View>
     );
   }
 
   return (
-    <View style={[styles.mediaSlide, { width, height }]}>
+    <View style={[styles.mediaSlide, { width: frameWidth, height: frameHeight }]}>
       <Image
         source={{ uri: item.url }}
-        style={{ width, height }}
-        contentFit={useContain ? 'contain' : 'cover'}
+        style={{ width: fitted.width, height: fitted.height }}
+        contentFit="contain"
       />
     </View>
   );
@@ -172,8 +191,7 @@ export function ImmersivePostViewer({
   const activeMedia = post.media[activeIndex] ?? post.media[0];
   const normalized = normalizeMediaDimensions(
     videoNaturalSize?.width ?? activeMedia?.width,
-    videoNaturalSize?.height ?? activeMedia?.height,
-    activeMedia?.orientation
+    videoNaturalSize?.height ?? activeMedia?.height
   );
   const stage = useImmersiveStageSize(normalized.width, normalized.height);
 
@@ -366,12 +384,16 @@ export function ImmersivePostViewer({
             item={item}
             active={active && index === activeIndex}
             muted={muted}
-            width={mediaW}
-            height={mediaH}
+            frameWidth={mediaW}
+            frameHeight={mediaH}
+            naturalWidth={
+              index === activeIndex ? (videoNaturalSize?.width ?? item.width) : item.width
+            }
+            naturalHeight={
+              index === activeIndex ? (videoNaturalSize?.height ?? item.height) : item.height
+            }
             onVideoNaturalSize={
-              stage.isWebDesktop && index === activeIndex
-                ? (w, h) => setVideoNaturalSize({ width: w, height: h })
-                : undefined
+              index === activeIndex ? (w, h) => setVideoNaturalSize({ width: w, height: h }) : undefined
             }
           />
         </View>
