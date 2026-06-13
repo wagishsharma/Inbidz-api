@@ -25,20 +25,18 @@ export function ImmersiveWebVideo({
 }: Props) {
   const ref = useRef<HTMLVideoElement | null>(null);
 
+  const tryPlay = () => {
+    const el = ref.current;
+    if (!el || !active) return;
+    void el.play().catch(() => {});
+  };
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
     if (active) {
-      const play = () => {
-        void el.play().catch(() => {});
-      };
-      if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        play();
-      } else {
-        el.addEventListener('loadeddata', play, { once: true });
-        return () => el.removeEventListener('loadeddata', play);
-      }
+      tryPlay();
       return;
     }
 
@@ -62,16 +60,20 @@ export function ImmersiveWebVideo({
   return createElement('video', {
     ref,
     src: uri,
-    poster,
+    poster: active ? undefined : poster,
     loop: true,
     playsInline: true,
+    autoPlay: active,
     muted,
-    preload: 'metadata',
+    preload: active ? 'auto' : 'metadata',
+    onLoadedData: tryPlay,
+    onCanPlay: tryPlay,
     onLoadedMetadata: () => {
       const el = ref.current;
       if (el?.videoWidth && el?.videoHeight) {
         onNaturalSize?.(el.videoWidth, el.videoHeight);
       }
+      tryPlay();
     },
     style: {
       width,

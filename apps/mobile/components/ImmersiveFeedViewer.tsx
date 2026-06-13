@@ -159,7 +159,6 @@ export function ImmersiveFeedViewer({
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         onMomentumScrollEnd={(e) => syncActiveIndex(e.nativeEvent.contentOffset.y)}
-        onScrollEndDrag={(e) => syncActiveIndex(e.nativeEvent.contentOffset.y)}
         onEndReached={loadMore}
         onEndReachedThreshold={2}
       />

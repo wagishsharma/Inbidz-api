@@ -69,14 +69,17 @@ function ImmersiveMediaItem({
   );
   const fitted = fitMediaInFrame(frameWidth, frameHeight, dims.width, dims.height);
 
+  const tryPlay = () => {
+    if (!shouldPlay) return;
+    void videoRef.current?.playAsync().catch(() => {});
+  };
+
   useEffect(() => {
     if (item.type !== 'video') return;
-    const video = videoRef.current;
-    if (!video) return;
     if (shouldPlay) {
-      void video.playAsync().catch(() => {});
+      tryPlay();
     } else {
-      void video.pauseAsync().catch(() => {});
+      void videoRef.current?.pauseAsync().catch(() => {});
     }
   }, [shouldPlay, videoUri, item.type]);
 
@@ -87,6 +90,9 @@ function ImmersiveMediaItem({
   }, []);
 
   const handlePlaybackStatus = (status: AVPlaybackStatus) => {
+    if (status.isLoaded && shouldPlay && !status.isPlaying) {
+      tryPlay();
+    }
     if (!status.isLoaded || !onVideoNaturalSize) return;
     const size = (
       status as AVPlaybackStatus & { naturalSize?: { width: number; height: number } }
@@ -127,10 +133,11 @@ function ImmersiveMediaItem({
           shouldPlay={shouldPlay}
           isLooping
           isMuted={muted}
-          usePoster={Boolean(poster)}
-          posterSource={poster ? { uri: poster } : undefined}
+          usePoster={Boolean(poster) && !shouldPlay}
+          posterSource={poster && !shouldPlay ? { uri: poster } : undefined}
           posterStyle={{ width: fitted.width, height: fitted.height }}
           onPlaybackStatusUpdate={handlePlaybackStatus}
+          onReadyForDisplay={tryPlay}
         />
       </View>
     );
